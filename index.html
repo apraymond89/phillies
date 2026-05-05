@@ -1517,6 +1517,13 @@ function renderInningTracker(g) {
 // ─── NEXT GAME ─────────────────────────────────────────────────────────────
 function renderNext() {
   if (!ALL.length) return '<div class="loading">No schedule data.</div>';
+  const td=todayStr(), isDefaultView=viewingGameIdx===null;
+  // If default view and no game today, show no-game message + next upcoming below
+  if (isDefaultView && !ALL.some(g=>g.d===td)) {
+    const next=ALL.find(g=>!g.played&&!g.postponed&&new Date(`${g.d}T${g.t}Z`).getTime()>Date.now());
+    const nextBlurb=next?`<div style="margin-top:12px;font-size:.72rem;color:var(--t2)">Next up: <strong style="color:var(--t1)">${pt(next.d,next.t).date} vs ${next.opponent}</strong></div>`:'';
+    return `<div class="content active" style="padding:48px 20px;text-align:center"><div style="font-size:2rem;margin-bottom:12px">🌙</div><div style="font-size:1rem;font-weight:700;color:var(--t1);letter-spacing:1px">No Game Today</div>${nextBlurb}</div>`;
+  }
   const idx=getViewingIdx(), g=ALL[idx]||nextGame(), {date,time,ms}=pt(g.d,g.t);
   const ti=teamInfo(g.opponent);
   const navLabel=`${date} · ${g.isHome?'vs':'@'} ${g.opponent}`;
@@ -1546,7 +1553,7 @@ function renderNext() {
 
   // ── PRE-GAME ──
   if (!g.played && !g.inProgress) {
-    const cdBlock=ms>Date.now()+60000?`<div class="countdown" style="margin-top:14px"><div class="cd-lbl">⏱ Time Until First Pitch</div><div class="cd-time" id="cdtime">—</div></div>`:'';
+    const cdBlock=isDefaultView&&ms>Date.now()+60000?`<div class="countdown" style="margin-top:14px"><div class="cd-lbl">⏱ Time Until First Pitch</div><div class="cd-time" id="cdtime">—</div></div>`:'';
     const heroBlock=`<div class="ng-hero">
       <div class="ng-label">${g.postponed?'⚠️ Postponed':'Next Game'}</div>
       <div class="ng-matchup">
