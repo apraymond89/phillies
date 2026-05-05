@@ -1280,6 +1280,7 @@ function pt(d,t) {
     return {date:dt.toLocaleDateString('en-US',{...tz,weekday:'short',month:'short',day:'numeric'}),time:dt.toLocaleTimeString('en-US',{...tz,hour:'numeric',minute:'2-digit',timeZoneName:'short'}),timeShort:dt.toLocaleTimeString('en-US',{...tz,hour:'numeric',minute:'2-digit'}),short:dt.toLocaleDateString('en-US',{...tz,month:'short',day:'numeric'}),ms:dt.getTime()};
   } catch { return {date:d,time:'TBD',timeShort:'TBD',short:d,ms:0}; }
 }
+function todayStr(){return new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'});}
 function nextGame() {
   const live=ALL.find(g=>g.inProgress); if(live) return live;
   const now=Date.now();
