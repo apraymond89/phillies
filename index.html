@@ -6,8 +6,7 @@
 <title>Phillies 2026</title>
 <style>
   /* ── RESET & BASE ── */
-  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
-  :root {
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }  :root {
     --bg:      #080808;
     --s1:      #101012;   /* card surface */
     --s2:      #161618;   /* elevated surface */
@@ -2215,11 +2214,16 @@ async function pollLiveGame() {
   const live=ALL.find(g=>g.inProgress);
   if(!live) { stopLivePoller(); return; }
   try {
-    const r=await fetch(`https://statsapi.mlb.com/api/v1.1/game/${live.gamePk}/feed/live?fields=liveData,linescore,teams,runs,hits,errors,innings,home,away,currentInning,inningHalf,outs,balls,strikes,offense,first,second,third,gameData,status,abstractGameState,detailedState`);
-    if(!r.ok) return;
-    const d=await r.json();
-    const ls=d.liveData?.linescore;
-    const status=d.gameData?.status;
+    // Use dedicated linescore endpoint — small payload, reliably includes
+    // balls/strikes/outs and offense.first/second/third for base runners.
+    const [lsRes, stRes] = await Promise.all([
+      fetch(`https://statsapi.mlb.com/api/v1/game/${live.gamePk}/linescore`),
+      fetch(`https://statsapi.mlb.com/api/v1.1/game/${live.gamePk}/feed/live?fields=gameData,status,abstractGameState,detailedState`)
+    ]);
+    if(!lsRes.ok) return;
+    const ls=await lsRes.json();
+    let status=null;
+    if(stRes.ok){ try{ const sd=await stRes.json(); status=sd.gameData?.status; }catch(e){} }
     if(!ls) return;
 
     // Update the live game object in ALL
@@ -2233,9 +2237,8 @@ async function pollLiveGame() {
       phillies: isHome?homeRuns:awayRuns,
       opp:      isHome?awayRuns:homeRuns,
       hs: homeRuns, as: awayRuns,
-      inProgress: status?.abstractGameState==='Live',
-      played: status?.abstractGameState==='Final'||status?.detailedState?.includes('Final')||status?.detailedState==='Game Over',
-      status: status?.detailedState||live.status,
+            inProgress: status?status.abstractGameState==='Live':live.inProgress,
+      played: status?(status.abstractGameState==='Final'||status.detailedState?.includes('Final')||status.detailedState==='Game Over'):live.played, status: status?.detailedState||live.status,
       inningStr: (()=>{const inn=ls.currentInning,half=ls.inningHalf;return inn?`${half==='Top'?'Top':'Bot'} ${inn}${inn===1?'st':inn===2?'nd':inn===3?'rd':'th'}`:'';})(),
       ls:{innings:ls.innings||live.ls?.innings||[],awayHits:ls.teams?.away?.hits,homeHits:ls.teams?.home?.hits,awayErrors:ls.teams?.away?.errors,homeErrors:ls.teams?.home?.errors},
       balls:ls.balls??null, strikes:ls.strikes??null, outs:ls.outs??null,
@@ -2261,6 +2264,7 @@ async function pollLiveGame() {
 
 function startLivePoller() {
   if(livePoller) return;
+  pollLiveGame(); // fire immediately — no 15s wait for first count/base data
   livePoller=setInterval(pollLiveGame,15000);
 }
 function stopLivePoller() {
