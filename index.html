@@ -1608,7 +1608,7 @@ function renderNext() {
   if (!g.played && !g.inProgress) {
     const cdBlock=ms>Date.now()+60000?`<div class="countdown" style="margin-top:14px"><div class="cd-lbl">⏱ Time Until First Pitch</div><div class="cd-time" id="cdtime">—</div></div>`:'';
     const heroBlock=`<div class="ng-hero">
-      <div class="ng-label">${g.postponed?'⚠️ Postponed':'Next Game'}</div>
+      <div class="ng-label">${g.postponed?'⚠️ Postponed':g.d===todayStr()?'Today':'Next Game'}</div>
       <div class="ng-matchup">
         <div class="ng-team"><span class="ng-emoji">🔔</span><div class="ng-tname phils">Phillies</div></div>
         <div class="ng-vs">vs</div>
