@@ -2265,7 +2265,7 @@ async function pollLiveGame() {
 function startLivePoller() {
   if(livePoller) return;
   pollLiveGame(); // fire immediately — no 15s wait for first count/base data
-  livePoller=setInterval(pollLiveGame,15000);
+  livePoller=setInterval(pollLiveGame,7000);
 }
 function stopLivePoller() {
   if(livePoller){ clearInterval(livePoller); livePoller=null; }
