@@ -2033,11 +2033,11 @@ async function loadPlayerStats(){
     const[bd,pd,ild]=await Promise.all([
       fetch(`${MLB_API}/stats?stats=season&group=hitting&teamId=${PHILLIES_ID}&season=${SEASON}&gameType=R&playerPool=All&limit=100`).then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(`${MLB_API}/stats?stats=season&group=pitching&teamId=${PHILLIES_ID}&season=${SEASON}&gameType=R&playerPool=All&limit=100`).then(r=>r.ok?r.json():null).catch(()=>null),
-      fetch(`${MLB_API}/teams/${PHILLIES_ID}/roster?rosterType=injuredList&season=${SEASON}`).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(`${MLB_API}/teams/${PHILLIES_ID}/roster?rosterType=40Man&season=${SEASON}`).then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
     BAT_STATS=(bd?.stats?.[0]?.splits||[]).filter(p=>(p.stat.atBats||0)>0);
     PIT_STATS_ALL=(pd?.stats?.[0]?.splits||[]).filter(p=>(p.stat.gamesPlayed||0)>0);
-    IL_PLAYERS=new Set((ild?.roster||[]).map(p=>p.person?.id).filter(Boolean));
+    IL_PLAYERS=new Set((ild?.roster||[]).filter(p=>{const c=p.status?.code||'';return c.startsWith('IL')||c.startsWith('DL');}).map(p=>p.person?.id).filter(Boolean));
     PLAYER_LOADED=true;
     if(currentTab==='players'){const el=document.getElementById('players-c');if(el)el.innerHTML=renderPlayers();}
     loadHitStreaks();
