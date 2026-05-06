@@ -1394,7 +1394,7 @@ function renderLiveStatsCard(g) {
 
 function buildLiveStatsBodyHtml() {
   const tabs=`<div class="live-sub-tabs">
-    <button class="live-sub-btn${liveStatsSubTab==='batting'?' active':''}" onclick="setLiveSubTab('batting')">🏏 Batting</button>
+    <button class="live-sub-btn${liveStatsSubTab==='batting'?' active':''}" onclick="setLiveSubTab('batting')">🏏 Hitting</button>
     <button class="live-sub-btn${liveStatsSubTab==='pitching'?' active':''}" onclick="setLiveSubTab('pitching')">⚾ Pitching</button>
     <button class="live-sub-btn${liveStatsSubTab==='plays'?' active':''}" onclick="setLiveSubTab('plays')">📝 Key Plays</button>
   </div>`;
@@ -2049,7 +2049,7 @@ async function loadHitStreaks(){
 
 function renderPlayers(){
   const subTabsHtml=`<div class="pl-sub-tabs">
-    <button class="pl-sub-btn ${plSubTab==='offense'?'active':''}" onclick="setPlSubTab('offense')">⚾ Offense</button>
+    <button class="pl-sub-btn ${plSubTab==='offense'?'active':''}" onclick="setPlSubTab('offense')">⚾ Hitting</button>
     <button class="pl-sub-btn ${plSubTab==='starters'?'active':''}" onclick="setPlSubTab('starters')">🏁 Starters</button>
     <button class="pl-sub-btn ${plSubTab==='bullpen'?'active':''}" onclick="setPlSubTab('bullpen')">🔥 Bullpen</button>
   </div>`;
