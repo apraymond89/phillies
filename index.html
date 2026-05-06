@@ -1198,6 +1198,7 @@
 // ─── CONFIG ────────────────────────────────────────────────────────────────
 const PHILLIES_ID = 143, SEASON = 2026;
 let IL_PLAYERS = new Set();
+let ROSTER_IDS = new Set();
 const MLB_API = 'https://statsapi.mlb.com/api/v1';
 let ALL=[], STANDINGS=[], cdTimer=null, currentTab='next', loading=false;
 
@@ -2038,6 +2039,7 @@ async function loadPlayerStats(){
     BAT_STATS=(bd?.stats?.[0]?.splits||[]).filter(p=>(p.stat.atBats||0)>0);
     PIT_STATS_ALL=(pd?.stats?.[0]?.splits||[]).filter(p=>(p.stat.gamesPlayed||0)>0);
     IL_PLAYERS=new Set((ild?.roster||[]).filter(p=>{const c=p.status?.code||'';return c.startsWith('IL')||c.startsWith('DL');}).map(p=>p.person?.id).filter(Boolean));
+    ROSTER_IDS=new Set((ild?.roster||[]).map(p=>p.person?.id).filter(Boolean));
     PLAYER_LOADED=true;
     if(currentTab==='players'){const el=document.getElementById('players-c');if(el)el.innerHTML=renderPlayers();}
     loadHitStreaks();
@@ -2104,8 +2106,9 @@ function renderOffense(){
     const st=p.stat,pid=p.player.id;
     const sk=PLAYER_STREAKS[pid];
     const streakBadge=sk?(sk.hit>=2?`<span class="pl-streak hot">🔥${sk.hit}</span>`:sk.cold>=5?`<span class="pl-streak cold">🥶${sk.cold}</span>`:''): '';
-    const ilBadge=IL_PLAYERS.has(pid)?'<span class="pl-streak" style="color:var(--gold);font-size:.65rem" title="Injured List">🩹</span>':'';
-    return`<tr style="cursor:pointer" onclick="showPlayerLog(${pid},'${p.player.fullName.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','hitting')">
+    const ilBadge=IL_PLAYERS.has(pid)?'<span class="pl-streak" style="color:var(--gold);
+    const onRoster=ROSTER_IDS.size===0||ROSTER_IDS.has(pid);font-size:.65rem" title="Injured List">🩹</span>':'';
+    return`<tr style="cursor:pointer${onRoster?'':';opacity:.45'}" onclick="showPlayerLog(${pid},'${p.player.fullName.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','hitting')">
       <td>${p.player.fullName}${streakBadge}${ilBadge}</td>
       <td>${st.gamesPlayed||0}</td>
       <td>${st.avg||'.---'}</td>
@@ -2126,7 +2129,7 @@ function renderOffense(){
       ${plLdrCard('Batting Avg',byAVG[0],byAVG[0]?.stat.avg||'.---',`${byAVG[0]?.stat.atBats||0} AB · min 30`)}
       ${plLdrCard('OPS',byOPS[0],byOPS[0]?.stat.ops||'.---',`OBP ${byOPS[0]?.stat.obp||0}`)}
     </div>
-    <div class="pl-section-lbl">All Hitters · ${players.length} players · Click column to sort${streaksLoaded?' · 🔥 hit streak · 🥶 hitless (5+) · 🩹 IL':' · Loading streaks…'}</div>
+    <div class="pl-section-lbl">All Hitters · ${players.length} players · Click column to sort${streaksLoaded?' · 🔥 hit streak · 🥶 hitless (5+) · 🩹 IL · faded = off roster':' · Loading streaks…'}</div>
     <div class="pl-tbl-wrap"><table class="pl-tbl">
       <thead><tr>
         <th onclick="sortPl('offense','avg')" style="text-align:left">Player</th>
@@ -2168,8 +2171,9 @@ function renderStartersPl(){
     const st=p.stat;
     const qs=st.qualityStarts!==undefined?st.qualityStarts:'—';
     const k9=ipDec(st.inningsPitched)>0?((st.strikeOuts||0)/ipDec(st.inningsPitched)*9).toFixed(1):'—';
-    const ilBadgePit=IL_PLAYERS.has(p.player.id)?'<span class="pl-streak" style="color:var(--gold);font-size:.65rem" title="Injured List">🩹</span>':'';
-    return`<tr style="cursor:pointer" onclick="showPlayerLog(${p.player.id},'${p.player.fullName.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','pitching')">
+    const ilBadgePit=IL_PLAYERS.has(p.player.id)?'<span class="pl-streak" style="color:var(--gold);
+    const onRosterPit=ROSTER_IDS.size===0||ROSTER_IDS.has(p.player.id);font-size:.65rem" title="Injured List">🩹</span>':'';
+    return`<tr style="cursor:pointer${onRosterPit?'':';opacity:.45'}" onclick="showPlayerLog(${p.player.id},'${p.player.fullName.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','pitching')">
       <td>${p.player.fullName}${ilBadgePit}</td>
       <td style="text-align:center">${st.wins||0}-${st.losses||0}</td>
       <td>${st.era||'—'}</td>
@@ -2231,8 +2235,9 @@ function renderBullpenPl(){
     const bs=st.blownSaves!==undefined?st.blownSaves:'—';
     const sv=st.saves||0,svo=st.saveOpportunities||0;
     const k9=ipDec(st.inningsPitched)>0?((st.strikeOuts||0)/ipDec(st.inningsPitched)*9).toFixed(1):'—';
-    const ilBadgePit=IL_PLAYERS.has(p.player.id)?'<span class="pl-streak" style="color:var(--gold);font-size:.65rem" title="Injured List">🩹</span>':'';
-    return`<tr style="cursor:pointer" onclick="showPlayerLog(${p.player.id},'${p.player.fullName.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','pitching')">
+    const ilBadgePit=IL_PLAYERS.has(p.player.id)?'<span class="pl-streak" style="color:var(--gold);
+    const onRosterPit=ROSTER_IDS.size===0||ROSTER_IDS.has(p.player.id);font-size:.65rem" title="Injured List">🩹</span>':'';
+    return`<tr style="cursor:pointer${onRosterPit?'':';opacity:.45'}" onclick="showPlayerLog(${p.player.id},'${p.player.fullName.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','pitching')">
       <td>${p.player.fullName}${ilBadgePit}</td>
       <td style="text-align:center">${st.wins||0}-${st.losses||0}</td>
       <td>${st.era||'—'}</td>
