@@ -1319,9 +1319,9 @@ function navGame(d){
   viewingGameIdx=Math.max(0,Math.min(ALL.length-1,getViewingIdx()+d));
   // Reset stats panel so it loads fresh data for the new game
   liveStatsOpen=false; liveBoxLoaded=false; LIVE_BOX=null; LIVE_PLAYS_DATA=null; liveStatsGamePk=null; LIVE_STATS_GAME=null;
-  // Auto-open recap for completed games
+  // Pre-fetch recap data in background for completed games (panel stays closed — no spinner)
   const g=ALL[viewingGameIdx];
-  if(g&&g.played) liveStatsOpen=true;
+  if(g&&g.played){ LIVE_STATS_GAME=g; loadLiveBox(g.gamePk); }
   renderTab('next');
 }
 
@@ -1423,6 +1423,10 @@ async function loadLiveBox(gamePk) {
     const body=document.getElementById('live-stats-body');
     if(body) body.innerHTML=buildLiveStatsBodyHtml();
     else renderTab('next');
+  } else if(liveBoxLoaded&&LIVE_STATS_GAME?.played){
+    // Background pre-fetch finished for a completed game — auto-open the recap
+    liveStatsOpen=true;
+    renderTab('next');
   }
 }
 
