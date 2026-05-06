@@ -2014,7 +2014,6 @@ function setStdFilter(f){stdFilter=f;document.getElementById('standings-c').inne
 
 // ─── PLAYERS TAB ──────────────────────────────────────────────────────────────
 let BAT_STATS=null, PIT_STATS_ALL=null, PLAYER_LOADED=false, PLAYER_LOADING=false;
-    IL_PLAYERS=new Set((ild?.roster||[]).map(p=>p.person?.id).filter(Boolean));
 let PLAYER_STREAKS={}; // playerId -> { hit:N, cold:N }
 let plSubTab='offense';
 let plSortOff={col:'ops',dir:-1}, plSortSp={col:'era',dir:1}, plSortBp={col:'era',dir:1};
@@ -2038,6 +2037,7 @@ async function loadPlayerStats(){
     ]);
     BAT_STATS=(bd?.stats?.[0]?.splits||[]).filter(p=>(p.stat.atBats||0)>0);
     PIT_STATS_ALL=(pd?.stats?.[0]?.splits||[]).filter(p=>(p.stat.gamesPlayed||0)>0);
+    IL_PLAYERS=new Set((ild?.roster||[]).map(p=>p.person?.id).filter(Boolean));
     PLAYER_LOADED=true;
     if(currentTab==='players'){const el=document.getElementById('players-c');if(el)el.innerHTML=renderPlayers();}
     loadHitStreaks();
