@@ -522,7 +522,15 @@
   .sg-tile.lost  { background: var(--loss-dim); color: var(--loss); border: 1px solid rgba(239,68,68,.15); }
   .sg-tile.swept { background: rgba(239,68,68,.18); color: #f87171; border: 1px solid rgba(239,68,68,.2); }
   .sg-tile.split { background: var(--gold-dim); color: var(--gold); border: 1px solid rgba(245,158,11,.15); }
-  .sg-tile.live  { background: var(--red); color: #fff; border: 1px solid var(--red); }
+  @keyframes blink-tile-green  { 0%,100%{background:rgba(34,197,94,.14);box-shadow:0 0 7px rgba(34,197,94,.3)} 50%{background:rgba(34,197,94,.04);box-shadow:none} }
+  @keyframes blink-tile-red    { 0%,100%{background:rgba(239,68,68,.14);box-shadow:0 0 7px rgba(239,68,68,.3)} 50%{background:rgba(239,68,68,.04);box-shadow:none} }
+  @keyframes blink-tile-yellow { 0%,100%{background:rgba(245,158,11,.14);box-shadow:0 0 7px rgba(245,158,11,.3)} 50%{background:rgba(245,158,11,.04);box-shadow:none} }
+  @keyframes blink-left-green  { 0%,100%{border-left-color:var(--win)} 50%{border-left-color:rgba(34,197,94,.2)} }
+  @keyframes blink-left-red    { 0%,100%{border-left-color:var(--loss)} 50%{border-left-color:rgba(239,68,68,.2)} }
+  @keyframes blink-left-yellow { 0%,100%{border-left-color:var(--gold)} 50%{border-left-color:rgba(245,158,11,.2)} }
+  .sg-tile.live          { background: rgba(245,158,11,.12); color: var(--gold); border: 1px solid rgba(245,158,11,.25); animation: blink-tile-yellow 1.4s ease-in-out infinite; }
+  .sg-tile.live-winning  { color: var(--win); border: 1px solid rgba(34,197,94,.25); animation: blink-tile-green 1.4s ease-in-out infinite; }
+  .sg-tile.live-losing   { color: var(--loss); border: 1px solid rgba(239,68,68,.25); animation: blink-tile-red 1.4s ease-in-out infinite; }
   .sg-tile.upcoming { background: var(--s2); color: var(--t4); border: 1px solid var(--s3); }
 
   /* Pace */
@@ -625,7 +633,9 @@
   .sr-row.lost   { border-left-color: var(--loss); }
   .sr-row.swept  { border-left-color: #f87171; border-color: rgba(239,68,68,.3); box-shadow: 0 0 0 1px rgba(239,68,68,.1), var(--shadow-sm); }
   .sr-row.split  { border-left-color: var(--gold); }
-  .sr-row.live-r { border-left-color: var(--red); }
+  .sr-row.live-r         { border-left-color: var(--gold); animation: blink-left-yellow 1.4s ease-in-out infinite; }
+  .sr-row.live-winning-r { border-left-color: var(--win); animation: blink-left-green 1.4s ease-in-out infinite; }
+  .sr-row.live-losing-r  { border-left-color: var(--loss); animation: blink-left-red 1.4s ease-in-out infinite; }
 
   /* Left info panel */
   .sr-left {
@@ -641,7 +651,9 @@
   }
   .sr-row.sweep  .sr-left { background: rgba(34,197,94,.07); }
   .sr-row.swept  .sr-left { background: rgba(239,68,68,.07); }
-  .sr-row.live-r .sr-left { background: rgba(232,24,40,.06); }
+  .sr-row.live-r .sr-left         { background: rgba(245,158,11,.06); }
+  .sr-row.live-winning-r .sr-left { background: rgba(34,197,94,.06); }
+  .sr-row.live-losing-r .sr-left  { background: rgba(239,68,68,.06); }
 
   .sr-badge {
     font-size: 0.46rem;
@@ -658,7 +670,9 @@
   .sr-badge.lost   { background: var(--loss-dim); color: var(--loss); }
   .sr-badge.swept  { background: rgba(239,68,68,.18); color: #f87171; border: 1px solid rgba(239,68,68,.25); }
   .sr-badge.split  { background: var(--gold-dim); color: var(--gold); }
-  .sr-badge.live-r { background: var(--red); color: #fff; }
+  .sr-badge.live-r         { background: rgba(245,158,11,.15); color: var(--gold); }
+  .sr-badge.live-winning-r { background: var(--win-dim); color: var(--win); }
+  .sr-badge.live-losing-r  { background: var(--loss-dim); color: var(--loss); }
   .sr-badge.upcoming { background: var(--s1); color: var(--t3); border: 1px solid var(--s3); }
 
   .sr-opp-info  { display: flex; align-items: center; gap: 4px; }
@@ -700,7 +714,10 @@
   .sr-g-line.row-win { background: var(--win-dim); }
   .sr-g-abbr { font-size: 0.5rem; font-weight: 700; }
   .sr-g-abbr.p { color: var(--red); }
+  .sr-g-abbr.p.phi-win  { color: var(--win); }
+  .sr-g-abbr.p.phi-loss { color: var(--loss); }
   .sr-g-abbr.o { color: var(--t3); }
+  .sr-g-score.opp-score { color: var(--t3); }
   .sr-g-score { font-size: 0.84rem; font-weight: 900; font-family: 'Arial Black', Arial, sans-serif; }
   .sr-g-score.win  { color: var(--win); }
   .sr-g-score.lose { color: var(--loss); }
@@ -1305,11 +1322,14 @@ function seriesGroups() {
 }
 function seriesResult(games) {
   const done=games.filter(g=>g.played);
-  if (games.some(g=>g.inProgress)) return 'live';
-  if (!done.length) return 'upcoming';
+  const isLive=games.some(g=>g.inProgress);
+  const allDone=done.length===games.length&&!isLive;
+  if (!done.length&&!isLive) return 'upcoming';
   const w=done.filter(g=>g.phillies>g.opp).length,l=done.filter(g=>g.phillies<g.opp).length;
-  if (done.length===games.length){if(w===done.length)return 'sweep';if(l===done.length)return 'swept';}
-  if (w>l) return 'won'; if (l>w) return 'lost'; return 'split';
+  if (allDone){if(w===done.length)return 'sweep';if(l===done.length)return 'swept';if(w>l)return 'won';if(l>w)return 'lost';return 'split';}
+  if(w>l) return 'live-winning';
+  if(l>w) return 'live-losing';
+  return 'live';
 }
 
 // ─── GAME NAV STATE ────────────────────────────────────────────────────────
@@ -1720,13 +1740,13 @@ function renderSeries() {
     </div>`;}
 
   // Season grid
-  const resCls=r=>({won:'won',sweep:'sweep',lost:'lost',swept:'swept',split:'split',live:'live',upcoming:'upcoming'})[r]||'upcoming';
-  const resLbl=r=>({won:'W',sweep:'SWP',lost:'L',swept:'SWT',split:'S',live:'●',upcoming:'·'})[r]||'·';
+  const resCls=r=>({won:'won',sweep:'sweep',lost:'lost',swept:'swept',split:'split',live:'live','live-winning':'live-winning','live-losing':'live-losing',upcoming:'upcoming'})[r]||'upcoming';
+  const resLbl=r=>({won:'W',sweep:'🧹',lost:'L',swept:'🧹',split:'S',live:'●','live-winning':'●','live-losing':'●',upcoming:'·'})[r]||'·';
   const gridTiles=grps.map((grp,i)=>{const r=seriesResult(grp.games),rc=resCls(r),ti=teamInfo(grp.opp);return`<button class="sg-tile ${rc}" onclick="jumpToSeries(${i})" title="${grp.opp}"><span class="sg-emoji">${ti.e}</span><span class="sg-abbr">${ti.a}</span><span class="sg-res">${resLbl(r)}</span></button>`;}).join('');
 
   // Series rows (full season)
-  const rowCls=r=>({won:'won',sweep:'sweep',lost:'lost',swept:'swept',split:'split',live:'live-r',upcoming:'upcoming'})[r]||'upcoming';
-  const badgeLbl=r=>({won:'WON',sweep:'🧹 SWEEP',lost:'LOST',swept:'💦 SWEPT',split:'SPLIT',live:'● LIVE',upcoming:'UPCOMING'})[r]||'';
+  const rowCls=r=>({won:'won',sweep:'sweep',lost:'lost',swept:'swept',split:'split',live:'live-r','live-winning':'live-winning-r','live-losing':'live-losing-r',upcoming:'upcoming'})[r]||'upcoming';
+  const badgeLbl=r=>({won:'WON',sweep:'🧹 SWEEP',lost:'LOST',swept:'🧹 SWEPT',split:'SPLIT',live:'● LIVE','live-winning':'● LIVE','live-losing':'● LIVE',upcoming:'UPCOMING'})[r]||'';
   const seriesRows=grps.map((grp,idx)=>{
     const res=seriesResult(grp.games),rc=rowCls(res);
     const first=grp.games[0],lastG=grp.games[grp.games.length-1];
@@ -1735,7 +1755,7 @@ function renderSeries() {
     const nG=grp.games.length;
     const cols=grp.games.map((g,gi)=>{
       if(g.inProgress&&g.phillies!=null){const pa=g.phillies>=g.opp;return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-line ${pa?'row-win':''}"><span class="sr-g-abbr p">PHI</span><span class="sr-g-score live-s">${g.phillies}</span></div><div class="sr-g-line ${!pa?'row-win':''}"><span class="sr-g-abbr o">${ti.a}</span><span class="sr-g-score live-s">${g.opp}</span></div><div class="sr-g-result lv">LIVE</div></div>`;}
-      if(g.played&&g.phillies!=null){const phiW=g.phillies>g.opp;const tv=g.broadcasts.length?getBc(g.broadcasts[0]):null;return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-line ${phiW?'row-win':''}"><span class="sr-g-abbr p">PHI</span><span class="sr-g-score ${phiW?'win':'lose'}">${g.phillies}</span></div><div class="sr-g-line ${!phiW?'row-win':''}"><span class="sr-g-abbr o">${ti.a}</span><span class="sr-g-score ${!phiW?'win':'lose'}">${g.opp}</span></div><div class="sr-g-result ${phiW?'w':'l'}">${phiW?'WIN':'LOSS'}</div>${tv?`<div class="sr-g-tv">${tv.display.replace('NBC Sports Philly','NBCSP')}</div>`:''}</div>`;}
+      if(g.played&&g.phillies!=null){const phiW=g.phillies>g.opp;const tv=g.broadcasts.length?getBc(g.broadcasts[0]):null;return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-line ${phiW?'row-win':''}"><span class="sr-g-abbr p ${phiW?'phi-win':'phi-loss'}">PHI</span><span class="sr-g-score ${phiW?'win':'lose'}">${g.phillies}</span></div><div class="sr-g-line ${!phiW?'row-win':''}"><span class="sr-g-abbr o">${ti.a}</span><span class="sr-g-score opp-score">${g.opp}</span></div><div class="sr-g-result ${phiW?'w':'l'}">${phiW?'WIN':'LOSS'}</div>${tv?`<div class="sr-g-tv">${tv.display.replace('NBC Sports Philly','NBCSP')}</div>`:''}</div>`;}
       if(g.postponed)return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-score u">PPD</div></div>`;
       const {timeShort,short}=pt(g.d,g.t);const tv=g.broadcasts.length?getBc(g.broadcasts[0]):null;
       return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-line"><span class="sr-g-abbr o" style="font-size:.44rem">${short}</span></div><div class="sr-g-score u">${timeShort}</div>${tv?`<div class="sr-g-tv">${tv.display.replace('NBC Sports Philly','NBCSP')}</div>`:''}</div>`;
