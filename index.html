@@ -1315,7 +1315,15 @@ function seriesResult(games) {
 // ─── GAME NAV STATE ────────────────────────────────────────────────────────
 let viewingGameIdx=null;
 function getViewingIdx(){if(viewingGameIdx!==null)return viewingGameIdx;const ng=nextGame();return ng?ALL.indexOf(ng):0;}
-function navGame(d){viewingGameIdx=Math.max(0,Math.min(ALL.length-1,getViewingIdx()+d));renderTab('next');}
+function navGame(d){
+  viewingGameIdx=Math.max(0,Math.min(ALL.length-1,getViewingIdx()+d));
+  // Reset stats panel so it loads fresh data for the new game
+  liveStatsOpen=false; liveBoxLoaded=false; LIVE_BOX=null; LIVE_PLAYS_DATA=null; liveStatsGamePk=null;
+  // Auto-open recap for completed games
+  const g=ALL[viewingGameIdx];
+  if(g&&g.played) liveStatsOpen=true;
+  renderTab('next');
+}
 
 function renderLinescore(g) {
   if(!g.ls||!g.ls.innings||!g.ls.innings.length) return '';
@@ -1346,12 +1354,16 @@ let LIVE_BOX=null, LIVE_PLAYS_DATA=null, liveBoxLoaded=false;
 let liveStatsOpen=false, liveStatsSubTab='batting', liveStatsGamePk=null;
 
 function renderLiveStatsCard(g) {
+  // Only show loaded data if it belongs to this game
+  const pkMatch=liveStatsGamePk===g.gamePk;
+  const loaded=liveBoxLoaded&&pkMatch;
   const bodyHtml=liveStatsOpen
-    ?(liveBoxLoaded?buildLiveStatsBodyHtml():'<div class="loading" style="padding:20px 0"><div class="spin"></div>Loading game data…</div>')
+    ?(loaded?buildLiveStatsBodyHtml():'<div class="loading" style="padding:20px 0"><div class="spin"></div>Loading game data…</div>')
     :'';
+  const label=g.inProgress?'📊 Game Stats':'📊 Game Recap';
   return`<div class="live-stats-card">
     <button id="live-stats-btn" class="live-stats-toggle${liveStatsOpen?' open':''}" onclick="toggleLiveStats()">
-      <span>📊 Game Stats</span><span>${liveStatsOpen?'▲':'▼'}</span>
+      <span>${label}</span><span>${liveStatsOpen?'▲':'▼'}</span>
     </button>
     <div id="live-stats-body" class="live-stats-body" style="display:${liveStatsOpen?'block':'none'}">${bodyHtml}</div>
   </div>`;
@@ -1372,16 +1384,17 @@ function buildLiveStatsBodyHtml() {
 
 function toggleLiveStats() {
   liveStatsOpen=!liveStatsOpen;
-  const live=ALL.find(g=>g.inProgress);
-  if(liveStatsOpen&&live&&(!liveBoxLoaded||liveStatsGamePk!==live.gamePk)) {
+  const idx=getViewingIdx(), g=ALL[idx];
+  const targetGame=g&&(g.inProgress||g.played)?g:ALL.find(g=>g.inProgress);
+  if(liveStatsOpen&&targetGame&&(!liveBoxLoaded||liveStatsGamePk!==targetGame.gamePk)) {
     // Show toggle open immediately while data loads
     const btn=document.getElementById('live-stats-btn');
     const body=document.getElementById('live-stats-body');
-    if(btn){btn.classList.add('open');btn.innerHTML='<span>📊 Game Stats</span><span>▲</span>';}
+    const label=targetGame.inProgress?'📊 Game Stats':'📊 Game Recap';
+    if(btn){btn.classList.add('open');btn.innerHTML=`<span>${label}</span><span>▲</span>`;}
     if(body){body.style.display='block';body.innerHTML='<div class="loading" style="padding:20px 0"><div class="spin"></div>Loading game data…</div>';}
-    loadLiveBox(live.gamePk);
+    loadLiveBox(targetGame.gamePk);
   } else {
-    // Sync re-render (data already loaded or closing)
     renderTab('next');
   }
 }
@@ -1608,9 +1621,9 @@ function renderNext() {
 
   const linescore=renderLinescore(g);
   const inningTracker=g.inProgress?renderInningTracker(g):'';
-  const livePanel=g.inProgress?renderLiveStatsCard(g):'';
+  const statsPanel=(g.inProgress||g.played)?renderLiveStatsCard(g):'';
 
-  return navBar+heroBlock+linescore+inningTracker+livePanel+pitcherCard+metaGrid+watchSection;
+  return navBar+heroBlock+linescore+inningTracker+statsPanel+(g.played?'':pitcherCard+metaGrid+watchSection);
 }
 
 function startCd(ms) {
