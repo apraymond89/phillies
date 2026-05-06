@@ -1392,16 +1392,14 @@ let LIVE_BOX=null, LIVE_PLAYS_DATA=null, liveBoxLoaded=false;
 let liveStatsOpen=false, liveStatsSubTab='batting', liveStatsGamePk=null;
 
 function renderLiveStatsCard(g) {
-  const isOpen=liveStatsOpen&&liveStatsGamePk===g.gamePk;
-  const lbl=g.inProgress?'📊 Game Stats':'📊 Box Score';
-  const bodyHtml=isOpen
+  const bodyHtml=liveStatsOpen
     ?(liveBoxLoaded?buildLiveStatsBodyHtml():'<div class="loading" style="padding:20px 0"><div class="spin"></div>Loading game data…</div>')
     :'';
   return`<div class="live-stats-card">
-    <button id="live-stats-btn" class="live-stats-toggle${isOpen?' open':''}" onclick="toggleLiveStats(${g.gamePk})">
-      <span>${lbl}</span><span>${isOpen?'▲':'▼'}</span>
+    <button id="live-stats-btn" class="live-stats-toggle${liveStatsOpen?' open':''}" onclick="toggleLiveStats()">
+      <span>📊 Game Stats</span><span>${liveStatsOpen?'▲':'▼'}</span>
     </button>
-    <div id="live-stats-body" class="live-stats-body" style="display:${isOpen?'block':'none'}">${bodyHtml}</div>
+    <div id="live-stats-body" class="live-stats-body" style="display:${liveStatsOpen?'block':'none'}">${bodyHtml}</div>
   </div>`;
 }
 
@@ -1418,21 +1416,23 @@ function buildLiveStatsBodyHtml() {
   return tabs+content;
 }
 
-function toggleLiveStats(gamePk) {
-  if(liveStatsGamePk!==gamePk){liveStatsOpen=true;liveBoxLoaded=false;LIVE_BOX=null;LIVE_PLAYS_DATA=null;liveStatsGamePk=gamePk;}
-  else{liveStatsOpen=!liveStatsOpen;}
-  if(liveStatsOpen&&!liveBoxLoaded) {
+function toggleLiveStats() {
+  liveStatsOpen=!liveStatsOpen;
+  const live=ALL.find(g=>g.inProgress);
+  if(liveStatsOpen&&live&&(!liveBoxLoaded||liveStatsGamePk!==live.gamePk)) {
     // Show toggle open immediately while data loads
     const btn=document.getElementById('live-stats-btn');
     const body=document.getElementById('live-stats-body');
-    if(btn){btn.classList.add('open');btn.innerHTML='<span>📊 Box Score</span><span>▲</span>';}
+    if(btn){btn.classList.add('open');btn.innerHTML='<span>📊 Game Stats</span><span>▲</span>';}
     if(body){body.style.display='block';body.innerHTML='<div class="loading" style="padding:20px 0"><div class="spin"></div>Loading game data…</div>';}
-    loadLiveBox(gamePk);
+    loadLiveBox(live.gamePk);
   } else {
     // Sync re-render (data already loaded or closing)
     renderTab('next');
   }
 }
+
+
 function setLiveSubTab(t) {
   liveStatsSubTab=t;
   const body=document.getElementById('live-stats-body');
@@ -1458,7 +1458,7 @@ async function loadLiveBox(gamePk) {
 
 function renderLiveBatting() {
   if(!LIVE_BOX) return'<div style="color:var(--t4);text-align:center;padding:20px;font-size:.68rem">Batting data unavailable.</div>';
-  const live=ALL.find(g=>g.gamePk===liveStatsGamePk)||ALL.find(g=>g.inProgress); if(!live) return'';
+  const live=ALL.find(g=>g.inProgress); if(!live) return'';
   const ti=teamInfo(live.opponent);
   const renderTeam=(key,lbl,cls)=>{
     const team=LIVE_BOX.teams?.[key]; if(!team) return'';
@@ -1483,7 +1483,7 @@ function renderLiveBatting() {
 
 function renderLivePitching() {
   if(!LIVE_BOX) return'<div style="color:var(--t4);text-align:center;padding:20px;font-size:.68rem">Pitching data unavailable.</div>';
-  const live=ALL.find(g=>g.gamePk===liveStatsGamePk)||ALL.find(g=>g.inProgress); if(!live) return'';
+  const live=ALL.find(g=>g.inProgress); if(!live) return'';
   const ti=teamInfo(live.opponent);
   const renderTeam=(key,lbl,cls)=>{
     const team=LIVE_BOX.teams?.[key]; if(!team) return'';
@@ -1508,7 +1508,7 @@ function renderLivePitching() {
 
 function renderLiveKeyPlays() {
   if(!LIVE_PLAYS_DATA) return'<div style="color:var(--t4);text-align:center;padding:20px;font-size:.68rem">Play data unavailable.</div>';
-  const live=ALL.find(g=>g.gamePk===liveStatsGamePk)||ALL.find(g=>g.inProgress);
+  const live=ALL.find(g=>g.inProgress);
   const ti=live?teamInfo(live.opponent):{a:'OPP'};
   const allPlays=LIVE_PLAYS_DATA.liveData?.plays?.allPlays||[];
   const scoringIdxs=LIVE_PLAYS_DATA.liveData?.plays?.scoringPlays||[];
@@ -1665,7 +1665,7 @@ function renderNext() {
 
   const linescore=renderLinescore(g);
   const inningTracker=g.inProgress?renderInningTracker(g):'';
-  const livePanel=(g.inProgress||g.played)?renderLiveStatsCard(g):'';
+  const livePanel=g.inProgress?renderLiveStatsCard(g):'';
 
   return navBar+heroBlock+linescore+inningTracker+livePanel+pitcherCard+metaGrid+watchSection;
 }
@@ -2361,7 +2361,7 @@ async function pollLiveGame() {
     // If game just ended, reset live stats state and do a full reload
     if(ALL[idx].played) {
       stopLivePoller();
-      // Keep LIVE_BOX/LIVE_PLAYS_DATA so final box score stays viewable
+      liveStatsOpen=false; liveBoxLoaded=false; LIVE_BOX=null; LIVE_PLAYS_DATA=null;
       loadData(); return;
     }
 
