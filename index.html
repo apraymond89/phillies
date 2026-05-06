@@ -1316,7 +1316,9 @@ function seriesResult(games) {
 let viewingGameIdx=null;
 function getViewingIdx(){if(viewingGameIdx!==null)return viewingGameIdx;const ng=nextGame();return ng?ALL.indexOf(ng):0;}
 function navGame(d){
-  viewingGameIdx=Math.max(0,Math.min(ALL.length-1,getViewingIdx()+d));
+  const newIdx=Math.max(0,Math.min(ALL.length-1,getViewingIdx()+d));
+  const defGame=nextGame(), defIdx=defGame?ALL.indexOf(defGame):-1;
+  viewingGameIdx=(newIdx===defIdx)?null:newIdx;
   // Reset stats panel so it loads fresh data for the new game
   liveStatsOpen=false; liveBoxLoaded=false; LIVE_BOX=null; LIVE_PLAYS_DATA=null; liveStatsGamePk=null; LIVE_STATS_GAME=null;
   // Pre-fetch recap data in background for completed games (panel stays closed — no spinner)
