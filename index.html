@@ -2197,9 +2197,6 @@ function renderBullpenPl(){
     const bv=useIp?ipDec(b.stat.inningsPitched):parseFloat(b.stat[s.col])||(s.col==='era'||s.col==='whip'?99:0);
     return s.dir===-1?bv-av:av-bv;
   };
-  const sorted=[...rp].sort(sortFn);
-  const withIP=rp.filter(p=>ipDec(p.stat.inningsPitched)>=3);
-  const byERA=[...withIP].sort((a,b)=>(parseFloat(a.stat.era)||99)-(parseFloat(b.stat.era)||99));
   // Split: main (active + IL), inactive (reassigned/released)
   const offRosterRp=ROSTER_IDS.size>0?PIT_STATS_ALL.filter(p=>!ROSTER_IDS.has(p.player.id)&&((p.stat.gamesStarted||0)===0||(p.stat.gamesStarted||0)/(p.stat.gamesPlayed||1)<0.25)):[];
   const mainRp=rp.filter(p=>!ROSTER_STATUS[p.player.id]||isILStatus(ROSTER_STATUS[p.player.id]));
