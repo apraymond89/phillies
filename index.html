@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Phillies 2026</title>
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#E81828">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Phillies">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   /* ── RESET & BASE ── */
   *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }  :root {
@@ -25,9 +32,9 @@
     --gold:    #f59e0b;
     --gold-dim:rgba(245,158,11,.1);
     --t1: #f0f0f2;   /* primary text */
-    --t2: #888;      /* secondary */
-    --t3: #444;      /* tertiary */
-    --t4: #2a2a2e;   /* ghost */
+    --t2: #aaa;      /* secondary */
+    --t3: #666;      /* tertiary */
+    --t4: #3a3a3e;   /* ghost */
     --shadow-sm: 0 1px 3px rgba(0,0,0,.4), 0 1px 0 rgba(255,255,255,.03);
     --shadow-md: 0 4px 16px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.03);
     --shadow-lg: 0 8px 32px rgba(0,0,0,.6), 0 1px 0 rgba(255,255,255,.04);
@@ -1280,6 +1287,7 @@ function pt(d,t) {
     return {date:dt.toLocaleDateString('en-US',{...tz,weekday:'short',month:'short',day:'numeric'}),time:dt.toLocaleTimeString('en-US',{...tz,hour:'numeric',minute:'2-digit',timeZoneName:'short'}),timeShort:dt.toLocaleTimeString('en-US',{...tz,hour:'numeric',minute:'2-digit'}),short:dt.toLocaleDateString('en-US',{...tz,month:'short',day:'numeric'}),ms:dt.getTime()};
   } catch { return {date:d,time:'TBD',timeShort:'TBD',short:d,ms:0}; }
 }
+function todayStr(){return new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'});}
 function nextGame() {
   const live=ALL.find(g=>g.inProgress); if(live) return live;
   const now=Date.now();
@@ -1517,6 +1525,13 @@ function renderInningTracker(g) {
 // ─── NEXT GAME ─────────────────────────────────────────────────────────────
 function renderNext() {
   if (!ALL.length) return '<div class="loading">No schedule data.</div>';
+  const td=todayStr(), isDefaultView=viewingGameIdx===null;
+  // If default view and no game today, show no-game message + next upcoming below
+  if (isDefaultView && !ALL.some(g=>g.d===td)) {
+    const next=ALL.find(g=>!g.played&&!g.postponed&&new Date(`${g.d}T${g.t}Z`).getTime()>Date.now());
+    const nextBlurb=next?`<div style="margin-top:12px;font-size:.72rem;color:var(--t2)">Next up: <strong style="color:var(--t1)">${pt(next.d,next.t).date} vs ${next.opponent}</strong></div>`:'';
+    return `<div class="content active" style="padding:48px 20px;text-align:center"><div style="font-size:2rem;margin-bottom:12px">🌙</div><div style="font-size:1rem;font-weight:700;color:var(--t1);letter-spacing:1px">No Game Today</div>${nextBlurb}</div>`;
+  }
   const idx=getViewingIdx(), g=ALL[idx]||nextGame(), {date,time,ms}=pt(g.d,g.t);
   const ti=teamInfo(g.opponent);
   const navLabel=`${date} · ${g.isHome?'vs':'@'} ${g.opponent}`;
@@ -1546,7 +1561,7 @@ function renderNext() {
 
   // ── PRE-GAME ──
   if (!g.played && !g.inProgress) {
-    const cdBlock=ms>Date.now()+60000?`<div class="countdown" style="margin-top:14px"><div class="cd-lbl">⏱ Time Until First Pitch</div><div class="cd-time" id="cdtime">—</div></div>`:'';
+    const cdBlock=isDefaultView&&ms>Date.now()+60000?`<div class="countdown" style="margin-top:14px"><div class="cd-lbl">⏱ Time Until First Pitch</div><div class="cd-time" id="cdtime">—</div></div>`:'';
     const heroBlock=`<div class="ng-hero">
       <div class="ng-label">${g.postponed?'⚠️ Postponed':'Next Game'}</div>
       <div class="ng-matchup">
