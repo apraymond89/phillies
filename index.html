@@ -956,6 +956,7 @@
   .pl-il-badge { font-size:.44rem; font-weight:700; padding:2px 5px; border-radius:6px; margin-left:5px; vertical-align:middle; display:inline-block; background:rgba(255,200,0,.15); color:#ffc800; border:1px solid rgba(255,200,0,.3); letter-spacing:.5px; }
   .pl-il-row td { opacity: 0.65; }
   .pl-il-section-lbl { color: #ffc800; border-left-color: #ffc800; background: linear-gradient(90deg,rgba(255,200,0,.08) 0%,transparent 70%); margin-top: 20px; }
+  .pl-inactive-section-lbl { color: var(--t3); border-left-color: var(--t4); background: linear-gradient(90deg,rgba(255,255,255,.03) 0%,transparent 70%); margin-top: 20px; }
   .pl-section-lbl { font-size:.52rem; letter-spacing:2px; text-transform:uppercase; color:var(--powder); margin:18px 0 8px; padding:4px 8px; border-left:2px solid var(--navy); border-bottom:1px solid rgba(0,48,135,.2); background:linear-gradient(90deg,var(--navy-dim) 0%,transparent 70%); border-radius:0 2px 2px 0; }
   .pl-section-lbl:first-child { margin-top:0; }
 
@@ -1954,6 +1955,9 @@ function sortPl(tab,col){
   const el=document.getElementById('players-c');if(el)el.innerHTML=renderPlayers();
 }
 
+// True IL = actually injured (10-Day, 15-Day, 60-Day)
+function isILStatus(rs){ if(!rs) return false; const d=(rs.description||'').toLowerCase(); const c=rs.code||''; return d.includes('injur')||['D10','D15','D60','DL','IL10','IL15','IL60'].includes(c); }
+
 async function loadPlayerStats(){
   if(PLAYER_LOADING)return; PLAYER_LOADING=true;
   try{
@@ -2025,24 +2029,31 @@ function renderOffense(){
     const av=parseFloat(a.stat[s.col])||0, bv=parseFloat(b.stat[s.col])||0;
     return s.dir===-1?bv-av:av-bv;
   };
-  const active40=ROSTER_IDS.size>0?BAT_STATS.filter(p=>ROSTER_IDS.has(p.player.id)):BAT_STATS;
-  const players=[...active40].sort(sortFn);
-  const byHR=[...active40].sort((a,b)=>(b.stat.homeRuns||0)-(a.stat.homeRuns||0));
-  const byRBI=[...active40].sort((a,b)=>(b.stat.rbi||0)-(a.stat.rbi||0));
-  const qual=active40.filter(p=>(p.stat.atBats||0)>=30);
+  // Split: on 40-man = active/IL; not on 40-man = released/traded
+  const on40=ROSTER_IDS.size>0?BAT_STATS.filter(p=>ROSTER_IDS.has(p.player.id)):BAT_STATS;
+  const offRoster=ROSTER_IDS.size>0?BAT_STATS.filter(p=>!ROSTER_IDS.has(p.player.id)):[];
+  // Main table: active + truly IL players only
+  const mainBat=on40.filter(p=>!ROSTER_STATUS[p.player.id]||isILStatus(ROSTER_STATUS[p.player.id]));
+  // Inactive: reassigned to minors / non-IL status on 40-man + released/traded
+  const inactiveBat=[...on40.filter(p=>ROSTER_STATUS[p.player.id]&&!isILStatus(ROSTER_STATUS[p.player.id])),...offRoster];
+  const players=[...mainBat].sort(sortFn);
+  const byHR=[...mainBat].sort((a,b)=>(b.stat.homeRuns||0)-(a.stat.homeRuns||0));
+  const byRBI=[...mainBat].sort((a,b)=>(b.stat.rbi||0)-(a.stat.rbi||0));
+  const qual=mainBat.filter(p=>(p.stat.atBats||0)>=30);
   const byAVG=[...qual].sort((a,b)=>parseFloat(b.stat.avg||0)-parseFloat(a.stat.avg||0));
   const byOPS=[...qual].sort((a,b)=>parseFloat(b.stat.ops||0)-parseFloat(a.stat.ops||0));
   const col=s.col,dir=s.dir;
   const th=(lbl,key,title='')=>{const sorted=key===col;const arr=sorted?(dir===-1?'↓':'↑'):'';return`<th onclick="sortPl('offense','${key}')" class="${sorted?'pl-sorted':''}" title="${title}">${lbl}${arr?' '+arr:''}</th>`;};
   const streaksLoaded=Object.keys(PLAYER_STREAKS).length>0;
-  const ilHitters=players.filter(p=>ROSTER_STATUS[p.player.id]);
+  const ilHitters=players.filter(p=>isILStatus(ROSTER_STATUS[p.player.id]));
   const rows=players.map(p=>{
     const st=p.stat,pid=p.player.id;
     const sk=PLAYER_STREAKS[pid];
     const rs=ROSTER_STATUS[pid];
-    const streakBadge=sk?(sk.hit>=2?`<span class="pl-streak hot">🔥${sk.hit}</span>`:sk.cold>=5?`<span class="pl-streak cold">🥶${sk.cold}</span>`:''): '';
-    const ilBadge=rs?`<span class="pl-il-badge">IL</span>`:'';
-    return`<tr class="${rs?'pl-il-row':''}">
+    const il=isILStatus(rs);
+    const streakBadge=sk&&!il?(sk.hit>=2?`<span class="pl-streak hot">🔥${sk.hit}</span>`:sk.cold>=5?`<span class="pl-streak cold">🥶${sk.cold}</span>`:''):'';
+    const ilBadge=il?`<span class="pl-il-badge">IL</span>`:'';
+    return`<tr class="${il?'pl-il-row':''}">
       <td>${p.player.fullName}${streakBadge}${ilBadge}</td>
       <td>${st.gamesPlayed||0}</td>
       <td>${st.avg||'.---'}</td>
@@ -2061,6 +2072,11 @@ function renderOffense(){
       <thead><tr><th style="text-align:left">Player</th><th>Status</th><th>AVG</th><th>HR</th><th>RBI</th><th>OPS</th></tr></thead>
       <tbody>${ilHitters.map(p=>{const st=p.stat;const rs=ROSTER_STATUS[p.player.id];return`<tr class="pl-il-row"><td>${p.player.fullName}</td><td style="color:var(--t3);font-size:.6rem">${rs.description||rs.code}</td><td>${st.avg||'.---'}</td><td>${st.homeRuns||0}</td><td>${st.rbi||0}</td><td>${st.ops||'.---'}</td></tr>`;}).join('')}</tbody>
     </table></div>`:'';
+  const inactiveSection=inactiveBat.length?`<div class="pl-section-lbl pl-inactive-section-lbl">⬇️ No Longer Active (${inactiveBat.length})</div>
+    <div class="pl-tbl-wrap"><table class="pl-tbl">
+      <thead><tr><th style="text-align:left">Player</th><th>Status</th><th>AVG</th><th>HR</th><th>RBI</th><th>OPS</th></tr></thead>
+      <tbody>${inactiveBat.map(p=>{const st=p.stat;const rs=ROSTER_STATUS[p.player.id];const statusLabel=rs?(rs.description||rs.code):'Released / Not on Roster';return`<tr class="pl-il-row"><td>${p.player.fullName}</td><td style="color:var(--t3);font-size:.6rem">${statusLabel}</td><td>${st.avg||'.---'}</td><td>${st.homeRuns||0}</td><td>${st.rbi||0}</td><td>${st.ops||'.---'}</td></tr>`;}).join('')}</tbody>
+    </table></div>`:'';
   return`<div class="pl-section-lbl">Leaders</div>
     <div class="pl-leaders">
       ${plLdrCard('Home Runs',byHR[0],byHR[0]?.stat.homeRuns||0,`${byHR[0]?.stat.rbi||0} RBI`)}
@@ -2068,7 +2084,7 @@ function renderOffense(){
       ${plLdrCard('Batting Avg',byAVG[0],byAVG[0]?.stat.avg||'.---',`${byAVG[0]?.stat.atBats||0} AB · min 30`)}
       ${plLdrCard('OPS',byOPS[0],byOPS[0]?.stat.ops||'.---',`OBP ${byOPS[0]?.stat.obp||0}`)}
     </div>
-    <div class="pl-section-lbl">All Hitters · ${players.length} players · Click column to sort${streaksLoaded?' · 🔥 hit streak · 🥶 hitless (5+)':' · Loading streaks…'}</div>
+    <div class="pl-section-lbl">Active Hitters · ${players.length} players · Click column to sort${streaksLoaded?' · 🔥 hit streak · 🥶 hitless (5+)':' · Loading streaks…'}</div>
     <div class="pl-tbl-wrap"><table class="pl-tbl">
       <thead><tr>
         <th onclick="sortPl('offense','avg')" style="text-align:left">Player</th>
@@ -2085,7 +2101,7 @@ function renderOffense(){
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
-    ${ilSection}`;
+    ${ilSection}${inactiveSection}`;
 }
 
 function renderStartersPl(){
@@ -2100,22 +2116,27 @@ function renderStartersPl(){
     const bv=useIp?ipDec(b.stat.inningsPitched):parseFloat(b.stat[s.col])||(s.col==='era'||s.col==='whip'?99:0);
     return s.dir===-1?bv-av:av-bv;
   };
-  const sorted=[...starters].sort(sortFn);
-  const qualIP=starters.filter(p=>ipDec(p.stat.inningsPitched)>=10);
+  // Split starters: main (active + IL), inactive (reassigned/released)
+  const offRosterSp=ROSTER_IDS.size>0?PIT_STATS_ALL.filter(p=>!ROSTER_IDS.has(p.player.id)&&(p.stat.gamesStarted||0)>=1):[];
+  const mainSp=starters.filter(p=>!ROSTER_STATUS[p.player.id]||isILStatus(ROSTER_STATUS[p.player.id]));
+  const inactiveSp=[...starters.filter(p=>ROSTER_STATUS[p.player.id]&&!isILStatus(ROSTER_STATUS[p.player.id])),...offRosterSp];
+  const sorted=[...mainSp].sort(sortFn);
+  const qualIP=mainSp.filter(p=>ipDec(p.stat.inningsPitched)>=10);
   const byERA=[...qualIP].sort((a,b)=>(parseFloat(a.stat.era)||99)-(parseFloat(b.stat.era)||99));
-  const byW=[...starters].sort((a,b)=>(b.stat.wins||0)-(a.stat.wins||0));
-  const byK=[...starters].sort((a,b)=>(b.stat.strikeOuts||0)-(a.stat.strikeOuts||0));
-  const byIP=[...starters].sort((a,b)=>ipDec(b.stat.inningsPitched)-ipDec(a.stat.inningsPitched));
+  const byW=[...mainSp].sort((a,b)=>(b.stat.wins||0)-(a.stat.wins||0));
+  const byK=[...mainSp].sort((a,b)=>(b.stat.strikeOuts||0)-(a.stat.strikeOuts||0));
+  const byIP=[...mainSp].sort((a,b)=>ipDec(b.stat.inningsPitched)-ipDec(a.stat.inningsPitched));
   const col=s.col,dir=s.dir;
   const th=(lbl,key,title='')=>{const sorted=key===col;const arr=sorted?(dir===-1?'↓':'↑'):'';return`<th onclick="sortPl('starters','${key}')" class="${sorted?'pl-sorted':''}" title="${title}">${lbl}${arr?' '+arr:''}</th>`;};
-  const ilStarters=starters.filter(p=>ROSTER_STATUS[p.player.id]);
+  const ilStarters=mainSp.filter(p=>isILStatus(ROSTER_STATUS[p.player.id]));
   const rows=sorted.map(p=>{
     const st=p.stat;
     const rs=ROSTER_STATUS[p.player.id];
+    const il=isILStatus(rs);
     const qs=st.qualityStarts!==undefined?st.qualityStarts:'—';
     const k9=ipDec(st.inningsPitched)>0?((st.strikeOuts||0)/ipDec(st.inningsPitched)*9).toFixed(1):'—';
-    const ilBadge=rs?`<span class="pl-il-badge">IL</span>`:'';
-    return`<tr class="${rs?'pl-il-row':''}">
+    const ilBadge=il?`<span class="pl-il-badge">IL</span>`:'';
+    return`<tr class="${il?'pl-il-row':''}">
       <td>${p.player.fullName}${ilBadge}</td>
       <td style="text-align:center">${st.wins||0}-${st.losses||0}</td>
       <td>${st.era||'—'}</td>
@@ -2133,6 +2154,11 @@ function renderStartersPl(){
       <thead><tr><th style="text-align:left">Pitcher</th><th>Status</th><th>W-L</th><th>ERA</th><th>IP</th><th>K</th></tr></thead>
       <tbody>${ilStarters.map(p=>{const st=p.stat;const rs=ROSTER_STATUS[p.player.id];return`<tr class="pl-il-row"><td>${p.player.fullName}</td><td style="color:var(--t3);font-size:.6rem">${rs.description||rs.code}</td><td>${st.wins||0}-${st.losses||0}</td><td>${st.era||'—'}</td><td>${st.inningsPitched||0}</td><td>${st.strikeOuts||0}</td></tr>`;}).join('')}</tbody>
     </table></div>`:'';
+  const inactiveSection=inactiveSp.length?`<div class="pl-section-lbl pl-inactive-section-lbl">⬇️ No Longer Active (${inactiveSp.length})</div>
+    <div class="pl-tbl-wrap"><table class="pl-tbl">
+      <thead><tr><th style="text-align:left">Pitcher</th><th>Status</th><th>W-L</th><th>ERA</th><th>IP</th><th>K</th></tr></thead>
+      <tbody>${inactiveSp.map(p=>{const st=p.stat;const rs=ROSTER_STATUS[p.player.id];const statusLabel=rs?(rs.description||rs.code):'Released / Not on Roster';return`<tr class="pl-il-row"><td>${p.player.fullName}</td><td style="color:var(--t3);font-size:.6rem">${statusLabel}</td><td>${st.wins||0}-${st.losses||0}</td><td>${st.era||'—'}</td><td>${st.inningsPitched||0}</td><td>${st.strikeOuts||0}</td></tr>`;}).join('')}</tbody>
+    </table></div>`:'';
   return`<div class="pl-section-lbl">Leaders</div>
     <div class="pl-leaders">
       ${plLdrCard('ERA',byERA[0],byERA[0]?.stat.era||'—',`${byERA[0]?.stat.inningsPitched||0} IP · min 10`)}
@@ -2140,7 +2166,7 @@ function renderStartersPl(){
       ${plLdrCard('Strikeouts',byK[0],byK[0]?.stat.strikeOuts||0,`${byK[0]?.stat.inningsPitched||0} IP`)}
       ${plLdrCard('Innings Pitched',byIP[0],byIP[0]?.stat.inningsPitched||0,`${byIP[0]?.stat.gamesStarted||0} GS`)}
     </div>
-    <div class="pl-section-lbl">${starters.length} Starting Pitchers · Click column to sort</div>
+    <div class="pl-section-lbl">${mainSp.length} Starting Pitchers · Click column to sort</div>
     <div class="pl-tbl-wrap"><table class="pl-tbl">
       <thead><tr>
         <th onclick="sortPl('starters','era')" style="text-align:left">Pitcher</th>
@@ -2156,7 +2182,7 @@ function renderStartersPl(){
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
-    ${ilSection}`;
+    ${ilSection}${inactiveSection}`;
 }
 
 function renderBullpenPl(){
@@ -2174,20 +2200,28 @@ function renderBullpenPl(){
   const sorted=[...rp].sort(sortFn);
   const withIP=rp.filter(p=>ipDec(p.stat.inningsPitched)>=3);
   const byERA=[...withIP].sort((a,b)=>(parseFloat(a.stat.era)||99)-(parseFloat(b.stat.era)||99));
-  const bySV=[...rp].sort((a,b)=>(b.stat.saves||0)-(a.stat.saves||0));
-  const byHLD=[...rp].sort((a,b)=>(b.stat.holds||0)-(a.stat.holds||0));
-  const byK=[...rp].sort((a,b)=>(b.stat.strikeOuts||0)-(a.stat.strikeOuts||0));
+  // Split: main (active + IL), inactive (reassigned/released)
+  const offRosterRp=ROSTER_IDS.size>0?PIT_STATS_ALL.filter(p=>!ROSTER_IDS.has(p.player.id)&&((p.stat.gamesStarted||0)===0||(p.stat.gamesStarted||0)/(p.stat.gamesPlayed||1)<0.25)):[];
+  const mainRp=rp.filter(p=>!ROSTER_STATUS[p.player.id]||isILStatus(ROSTER_STATUS[p.player.id]));
+  const inactiveRp=[...rp.filter(p=>ROSTER_STATUS[p.player.id]&&!isILStatus(ROSTER_STATUS[p.player.id])),...offRosterRp];
+  const sorted=[...mainRp].sort(sortFn);
+  const withIP=mainRp.filter(p=>ipDec(p.stat.inningsPitched)>=3);
+  const byERA=[...withIP].sort((a,b)=>(parseFloat(a.stat.era)||99)-(parseFloat(b.stat.era)||99));
+  const bySV=[...mainRp].sort((a,b)=>(b.stat.saves||0)-(a.stat.saves||0));
+  const byHLD=[...mainRp].sort((a,b)=>(b.stat.holds||0)-(a.stat.holds||0));
+  const byK=[...mainRp].sort((a,b)=>(b.stat.strikeOuts||0)-(a.stat.strikeOuts||0));
   const col=s.col,dir=s.dir;
   const th=(lbl,key,title='')=>{const sorted=key===col;const arr=sorted?(dir===-1?'↓':'↑'):'';return`<th onclick="sortPl('bullpen','${key}')" class="${sorted?'pl-sorted':''}" title="${title}">${lbl}${arr?' '+arr:''}</th>`;};
-  const ilBullpen=rp.filter(p=>ROSTER_STATUS[p.player.id]);
+  const ilBullpen=mainRp.filter(p=>isILStatus(ROSTER_STATUS[p.player.id]));
   const rows=sorted.map(p=>{
     const st=p.stat;
     const rs=ROSTER_STATUS[p.player.id];
+    const il=isILStatus(rs);
     const bs=st.blownSaves!==undefined?st.blownSaves:'—';
     const sv=st.saves||0,svo=st.saveOpportunities||0;
     const k9=ipDec(st.inningsPitched)>0?((st.strikeOuts||0)/ipDec(st.inningsPitched)*9).toFixed(1):'—';
-    const ilBadge=rs?`<span class="pl-il-badge">IL</span>`:'';
-    return`<tr class="${rs?'pl-il-row':''}">
+    const ilBadge=il?`<span class="pl-il-badge">IL</span>`:'';
+    return`<tr class="${il?'pl-il-row':''}">
       <td>${p.player.fullName}${ilBadge}</td>
       <td style="text-align:center">${st.wins||0}-${st.losses||0}</td>
       <td>${st.era||'—'}</td>
@@ -2206,6 +2240,11 @@ function renderBullpenPl(){
       <thead><tr><th style="text-align:left">Pitcher</th><th>Status</th><th>W-L</th><th>ERA</th><th>SV</th><th>IP</th></tr></thead>
       <tbody>${ilBullpen.map(p=>{const st=p.stat;const rs=ROSTER_STATUS[p.player.id];const sv=st.saves||0,svo=st.saveOpportunities||0;return`<tr class="pl-il-row"><td>${p.player.fullName}</td><td style="color:var(--t3);font-size:.6rem">${rs.description||rs.code}</td><td>${st.wins||0}-${st.losses||0}</td><td>${st.era||'—'}</td><td>${sv}${svo>0?`<span style="color:var(--t3);font-size:.52rem">/${svo}</span>`:''}</td><td>${st.inningsPitched||0}</td></tr>`;}).join('')}</tbody>
     </table></div>`:'';
+  const inactiveSection=inactiveRp.length?`<div class="pl-section-lbl pl-inactive-section-lbl">⬇️ No Longer Active (${inactiveRp.length})</div>
+    <div class="pl-tbl-wrap"><table class="pl-tbl">
+      <thead><tr><th style="text-align:left">Pitcher</th><th>Status</th><th>W-L</th><th>ERA</th><th>SV</th><th>IP</th></tr></thead>
+      <tbody>${inactiveRp.map(p=>{const st=p.stat;const rs=ROSTER_STATUS[p.player.id];const sv=st.saves||0,svo=st.saveOpportunities||0;const statusLabel=rs?(rs.description||rs.code):'Released / Not on Roster';return`<tr class="pl-il-row"><td>${p.player.fullName}</td><td style="color:var(--t3);font-size:.6rem">${statusLabel}</td><td>${st.wins||0}-${st.losses||0}</td><td>${st.era||'—'}</td><td>${sv}${svo>0?`<span style="color:var(--t3);font-size:.52rem">/${svo}</span>`:''}</td><td>${st.inningsPitched||0}</td></tr>`;}).join('')}</tbody>
+    </table></div>`:'';
   return`<div class="pl-section-lbl">Leaders</div>
     <div class="pl-leaders">
       ${plLdrCard('ERA',byERA[0],byERA[0]?.stat.era||'—',`${byERA[0]?.stat.inningsPitched||0} IP · min 3`)}
@@ -2213,7 +2252,7 @@ function renderBullpenPl(){
       ${plLdrCard('Holds',byHLD[0],byHLD[0]?.stat.holds||0,`${byHLD[0]?.stat.gamesPlayed||0} G`)}
       ${plLdrCard('Strikeouts',byK[0],byK[0]?.stat.strikeOuts||0,`${byK[0]?.stat.inningsPitched||0} IP`)}
     </div>
-    <div class="pl-section-lbl">${rp.length} Relief Pitchers · Click column to sort</div>
+    <div class="pl-section-lbl">${mainRp.length} Relief Pitchers · Click column to sort</div>
     <div class="pl-tbl-wrap"><table class="pl-tbl">
       <thead><tr>
         <th onclick="sortPl('bullpen','era')" style="text-align:left">Pitcher</th>
@@ -2230,7 +2269,7 @@ function renderBullpenPl(){
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
-    ${ilSection}`;
+    ${ilSection}${inactiveSection}`;
 }
 
 // ─── TAB + LOAD ────────────────────────────────────────────────────────────
