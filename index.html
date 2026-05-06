@@ -1318,7 +1318,7 @@ function getViewingIdx(){if(viewingGameIdx!==null)return viewingGameIdx;const ng
 function navGame(d){
   viewingGameIdx=Math.max(0,Math.min(ALL.length-1,getViewingIdx()+d));
   // Reset stats panel so it loads fresh data for the new game
-  liveStatsOpen=false; liveBoxLoaded=false; LIVE_BOX=null; LIVE_PLAYS_DATA=null; liveStatsGamePk=null;
+  liveStatsOpen=false; liveBoxLoaded=false; LIVE_BOX=null; LIVE_PLAYS_DATA=null; liveStatsGamePk=null; LIVE_STATS_GAME=null;
   // Auto-open recap for completed games
   const g=ALL[viewingGameIdx];
   if(g&&g.played) liveStatsOpen=true;
@@ -1352,6 +1352,7 @@ function renderLinescore(g) {
 // ─── LIVE GAME STATS ─────────────────────────────────────────────────────────
 let LIVE_BOX=null, LIVE_PLAYS_DATA=null, liveBoxLoaded=false;
 let liveStatsOpen=false, liveStatsSubTab='batting', liveStatsGamePk=null;
+let LIVE_STATS_GAME=null; // the game object currently shown in the stats panel
 
 function renderLiveStatsCard(g) {
   // Only show loaded data if it belongs to this game
@@ -1387,6 +1388,7 @@ function toggleLiveStats() {
   const idx=getViewingIdx(), g=ALL[idx];
   const targetGame=g&&(g.inProgress||g.played)?g:ALL.find(g=>g.inProgress);
   if(liveStatsOpen&&targetGame&&(!liveBoxLoaded||liveStatsGamePk!==targetGame.gamePk)) {
+    LIVE_STATS_GAME=targetGame;
     // Show toggle open immediately while data loads
     const btn=document.getElementById('live-stats-btn');
     const body=document.getElementById('live-stats-body');
@@ -1407,10 +1409,12 @@ function setLiveSubTab(t) {
 
 async function loadLiveBox(gamePk) {
   liveStatsGamePk=gamePk;
+  // Set LIVE_STATS_GAME from ALL if not already set by toggleLiveStats
+  if(!LIVE_STATS_GAME||LIVE_STATS_GAME.gamePk!==gamePk) LIVE_STATS_GAME=ALL.find(g=>g.gamePk===gamePk)||null;
   try {
     const [boxR,feedR]=await Promise.all([
       fetch(`${MLB_API}/game/${gamePk}/boxscore`).then(r=>r.ok?r.json():null).catch(()=>null),
-      fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live?fields=liveData,plays,allPlays,scoringPlays,result,about,description,inning,halfInning`).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live?fields=liveData,plays,allPlays,scoringPlays,result,description,about,inning,halfInning,homeScore,awayScore`).then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
     LIVE_BOX=boxR; LIVE_PLAYS_DATA=feedR; liveBoxLoaded=true;
   } catch(e){console.error('live box error',e);}
@@ -1424,7 +1428,7 @@ async function loadLiveBox(gamePk) {
 
 function renderLiveBatting() {
   if(!LIVE_BOX) return'<div style="color:var(--t4);text-align:center;padding:20px;font-size:.68rem">Batting data unavailable.</div>';
-  const live=ALL.find(g=>g.inProgress); if(!live) return'';
+  const live=LIVE_STATS_GAME||ALL.find(g=>g.inProgress); if(!live) return'';
   const ti=teamInfo(live.opponent);
   const renderTeam=(key,lbl,cls)=>{
     const team=LIVE_BOX.teams?.[key]; if(!team) return'';
@@ -1449,7 +1453,7 @@ function renderLiveBatting() {
 
 function renderLivePitching() {
   if(!LIVE_BOX) return'<div style="color:var(--t4);text-align:center;padding:20px;font-size:.68rem">Pitching data unavailable.</div>';
-  const live=ALL.find(g=>g.inProgress); if(!live) return'';
+  const live=LIVE_STATS_GAME||ALL.find(g=>g.inProgress); if(!live) return'';
   const ti=teamInfo(live.opponent);
   const renderTeam=(key,lbl,cls)=>{
     const team=LIVE_BOX.teams?.[key]; if(!team) return'';
@@ -1474,7 +1478,7 @@ function renderLivePitching() {
 
 function renderLiveKeyPlays() {
   if(!LIVE_PLAYS_DATA) return'<div style="color:var(--t4);text-align:center;padding:20px;font-size:.68rem">Play data unavailable.</div>';
-  const live=ALL.find(g=>g.inProgress);
+  const live=LIVE_STATS_GAME||ALL.find(g=>g.inProgress);
   const ti=live?teamInfo(live.opponent):{a:'OPP'};
   const allPlays=LIVE_PLAYS_DATA.liveData?.plays?.allPlays||[];
   const scoringIdxs=LIVE_PLAYS_DATA.liveData?.plays?.scoringPlays||[];
