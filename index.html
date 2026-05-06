@@ -808,15 +808,31 @@
     padding: 10px 14px;
     margin-bottom: 14px;
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
   }
+  .pitchers-card-top { display: flex; align-items: center; gap: 8px; }
   .pitcher-side { flex: 1; text-align: center; }
   .pitcher-lbl { font-size: 0.46rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--powder); margin-bottom: 3px; }
   .pitcher-name { font-size: 0.72rem; font-weight: 700; color: var(--t1); }
   .pitcher-name.phi { color: var(--red); }
   .pitcher-name.tbd { color: var(--t4); font-weight: 400; font-style: italic; font-size: 0.64rem; }
   .pitcher-divider { font-size: 0.52rem; color: var(--t4); font-weight: 700; letter-spacing: 1px; flex-shrink: 0; }
+  .ps-toggle-btn { width:100%; background:var(--s1); border:1px solid var(--s3); border-radius:var(--r-sm); color:var(--t3); font-size:0.52rem; letter-spacing:1px; text-transform:uppercase; padding:5px 0; cursor:pointer; }
+  .ps-toggle-btn:hover { color:var(--t1); border-color:var(--s4); }
+  .ps-expand { display:flex; flex-direction:column; gap:8px; padding-top:2px; }
+  .ps-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .ps-pname { font-size:0.68rem; font-weight:700; color:var(--t2); flex-shrink:0; }
+  .ps-pname.phi { color:var(--red); }
+  .ps-divider { height:1px; background:var(--s3); }
+  .ps-stats { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+  .ps-hand { font-size:0.44rem; font-weight:700; padding:2px 5px; border-radius:4px; letter-spacing:.5px; }
+  .ps-hand.lhp { background:rgba(99,102,241,.15); color:#818cf8; border:1px solid rgba(99,102,241,.25); }
+  .ps-hand.rhp { background:rgba(245,158,11,.12); color:var(--gold); border:1px solid rgba(245,158,11,.2); }
+  .ps-stat { display:flex; flex-direction:column; align-items:center; gap:1px; }
+  .ps-lbl { font-size:0.4rem; letter-spacing:1px; text-transform:uppercase; color:var(--t4); }
+  .ps-stat > :last-child { font-size:0.68rem; font-weight:700; color:var(--t1); }
+  .ps-loading { font-size:0.56rem; color:var(--t4); text-align:center; padding:6px 0; }
   .sc-pitchers { font-size: 0.62rem; color: var(--t2); margin-top: 5px; }
   .sc-pitchers span { color: var(--t3); }
 
@@ -1276,8 +1292,10 @@ function parseGames(data) {
       if (inProgress&&g.linescore){const inn=g.linescore.currentInning||'',half=g.linescore.inningHalf||'';if(inn)inningStr=`${half==='Top'?'Top':'Bot'} ${inn}${inn===1?'st':inn===2?'nd':inn===3?'rd':'th'}`;}
       const philliesProbable=isHome?(g.teams.home.probablePitcher?.fullName||null):(g.teams.away.probablePitcher?.fullName||null);
       const oppProbable=isHome?(g.teams.away.probablePitcher?.fullName||null):(g.teams.home.probablePitcher?.fullName||null);
+      const philliesProbableId=isHome?(g.teams.home.probablePitcher?.id||null):(g.teams.away.probablePitcher?.id||null);
+      const oppProbableId=isHome?(g.teams.away.probablePitcher?.id||null):(g.teams.home.probablePitcher?.id||null);
       const ls=g.linescore?{innings:g.linescore.innings||[],awayHits:g.linescore.teams?.away?.hits,homeHits:g.linescore.teams?.home?.hits,awayErrors:g.linescore.teams?.away?.errors,homeErrors:g.linescore.teams?.home?.errors}:null;
-      games.push({gamePk:g.gamePk,h:ht,a:at,d:dateObj.date,t:gameTimeUTC,broadcasts,tv:broadcasts[0]||'TBD',hs,as:as_,isHome,opponent,phillies:philliesScore,opp:oppScore,played,inProgress,postponed,status:detail,inningStr,venue:g.venue?.name||(isHome?'Citizens Bank Park':opponent),philliesProbable,oppProbable,ls});
+      games.push({gamePk:g.gamePk,h:ht,a:at,d:dateObj.date,t:gameTimeUTC,broadcasts,tv:broadcasts[0]||'TBD',hs,as:as_,isHome,opponent,phillies:philliesScore,opp:oppScore,played,inProgress,postponed,status:detail,inningStr,venue:g.venue?.name||(isHome?'Citizens Bank Park':opponent),philliesProbable,oppProbable,philliesProbableId,oppProbableId,ls});
     }
   }
   return games.sort((a,b)=>(a.d+a.t)>(b.d+b.t)?1:-1);
@@ -1340,7 +1358,7 @@ function navGame(d){
   const defGame=nextGame(), defIdx=defGame?ALL.indexOf(defGame):-1;
   viewingGameIdx=(newIdx===defIdx)?null:newIdx;
   // Reset stats panel so it loads fresh data for the new game
-  liveStatsOpen=false; liveBoxLoaded=false; LIVE_BOX=null; LIVE_PLAYS_DATA=null; liveStatsGamePk=null; LIVE_STATS_GAME=null;
+  liveStatsOpen=false; liveBoxLoaded=false; LIVE_BOX=null; LIVE_PLAYS_DATA=null; liveStatsGamePk=null; LIVE_STATS_GAME=null; pitcherStatsOpen=false;
   // Pre-fetch recap data in background for completed games (panel stays closed — no spinner)
   const g=ALL[viewingGameIdx];
   if(g&&g.played){ LIVE_STATS_GAME=g; loadLiveBox(g.gamePk); }
@@ -1375,6 +1393,35 @@ function renderLinescore(g) {
 let LIVE_BOX=null, LIVE_PLAYS_DATA=null, liveBoxLoaded=false;
 let liveStatsOpen=false, liveStatsSubTab='batting', liveStatsGamePk=null;
 let LIVE_STATS_GAME=null; // the game object currently shown in the stats panel
+
+// ─── PITCHER STATS TOGGLE ──────────────────────────────────────────────────
+let PITCHER_STATS={}; // id -> {era, wins, losses, strikeOuts, hand}
+let pitcherStatsOpen=false;
+
+async function loadPitcherStats(g) {
+  const ids=[g.philliesProbableId,g.oppProbableId].filter(Boolean);
+  if(!ids.length){renderTab('next');return;}
+  const missing=ids.filter(id=>!PITCHER_STATS[id]);
+  if(missing.length){
+    try{
+      const res=await fetch(`${MLB_API}/people?personIds=${missing.join(',')}&hydrate=stats(group=pitching,type=season,season=${SEASON})`);
+      if(res.ok){
+        const data=await res.json();
+        for(const p of (data.people||[])){
+          const split=p.stats?.find(s=>s.group?.displayName==='pitching')?.splits?.[0]?.stat||{};
+          PITCHER_STATS[p.id]={era:split.era||'—',wins:split.wins??'—',losses:split.losses??'—',strikeOuts:split.strikeOuts??'—',hand:p.pitchHand?.code||'?'};
+        }
+      }
+    }catch(e){}
+  }
+  renderTab('next');
+}
+
+function togglePitcherStats(){
+  pitcherStatsOpen=!pitcherStatsOpen;
+  if(pitcherStatsOpen){const idx=getViewingIdx(),g=ALL[idx]||nextGame();if(g)loadPitcherStats(g);}
+  else renderTab('next');
+}
 
 function renderLiveStatsCard(g) {
   // Only show loaded data if it belongs to this game
@@ -1593,16 +1640,28 @@ function renderNext() {
     <button class="ng-nav-btn" onclick="navGame(1)" ${idx===ALL.length-1?'disabled':''}>Next ›</button>
   </div>`;
 
+  const psStatRow=(id)=>{
+    const s=id?PITCHER_STATS[id]:null;
+    if(!s) return pitcherStatsOpen?`<div class="ps-loading">Loading…</div>`:'';
+    return`<div class="ps-stats"><span class="ps-hand ${s.hand==='L'?'lhp':'rhp'}">${s.hand}HP</span><span class="ps-stat"><span class="ps-lbl">ERA</span>${s.era}</span><span class="ps-stat"><span class="ps-lbl">W-L</span>${s.wins}-${s.losses}</span><span class="ps-stat"><span class="ps-lbl">K</span>${s.strikeOuts}</span></div>`;
+  };
   const pitcherCard=`<div class="pitchers-card">
-    <div class="pitcher-side"><div class="pitcher-lbl">⚾ PHI Starter</div><div class="pitcher-name phi">${g.philliesProbable||'<span class="tbd">TBD</span>'}</div></div>
-    <div class="pitcher-divider">vs</div>
-    <div class="pitcher-side"><div class="pitcher-lbl">⚾ ${ti.a} Starter</div><div class="pitcher-name">${g.oppProbable||'<span class="tbd">TBD</span>'}</div></div>
+    <div class="pitchers-card-top">
+      <div class="pitcher-side"><div class="pitcher-lbl">⚾ PHI Starter</div><div class="pitcher-name phi">${g.philliesProbable||'<span class="tbd">TBD</span>'}</div></div>
+      <div class="pitcher-divider">vs</div>
+      <div class="pitcher-side"><div class="pitcher-lbl">⚾ ${ti.a} Starter</div><div class="pitcher-name">${g.oppProbable||'<span class="tbd">TBD</span>'}</div></div>
+    </div>
+    <button class="ps-toggle-btn" onclick="togglePitcherStats()">${pitcherStatsOpen?'▲ Hide':'▼ Pitcher Stats'}</button>
+    ${pitcherStatsOpen?`<div class="ps-expand">
+      <div class="ps-row"><div class="ps-pname phi">${g.philliesProbable||'TBD'}</div>${psStatRow(g.philliesProbableId)}</div>
+      <div class="ps-divider"></div>
+      <div class="ps-row"><div class="ps-pname">${g.oppProbable||'TBD'}</div>${psStatRow(g.oppProbableId)}</div>
+    </div>`:''}
   </div>`;
 
   const metaGrid=`<div class="ng-meta">
-    <div class="ng-meta-item"><div class="ng-meta-lbl">📅 Date</div><div class="ng-meta-val">${date}</div></div>
     <div class="ng-meta-item"><div class="ng-meta-lbl">🕐 First Pitch</div><div class="ng-meta-val">${time}</div></div>
-    <div class="ng-meta-item" style="grid-column:1/-1"><div class="ng-meta-lbl">🏟️ Venue</div><div class="ng-meta-val">${g.venue||'—'}</div></div>
+    <div class="ng-meta-item"><div class="ng-meta-lbl">🏟️ Venue</div><div class="ng-meta-val">${g.venue||'—'}</div></div>
   </div>`;
 
   const tvRows=g.broadcasts.length
