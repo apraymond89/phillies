@@ -1941,6 +1941,7 @@ function setStdFilter(f){stdFilter=f;document.getElementById('standings-c').inne
 let BAT_STATS=null, PIT_STATS_ALL=null, PLAYER_LOADED=false, PLAYER_LOADING=false;
 let PLAYER_STREAKS={}; // playerId -> { hit:N, cold:N }
 let ROSTER_STATUS={}; // playerId -> { description: "10-Day IL", code: "D10" }
+let ROSTER_IDS=new Set(); // all player IDs currently on the 40-man roster
 let plSubTab='offense';
 let plSortOff={col:'ops',dir:-1}, plSortSp={col:'era',dir:1}, plSortBp={col:'era',dir:1};
 
@@ -1959,15 +1960,17 @@ async function loadPlayerStats(){
     const[bd,pd,rd]=await Promise.all([
       fetch(`${MLB_API}/stats?stats=season&group=hitting&teamId=${PHILLIES_ID}&season=${SEASON}&gameType=R&playerPool=All&limit=100`).then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(`${MLB_API}/stats?stats=season&group=pitching&teamId=${PHILLIES_ID}&season=${SEASON}&gameType=R&playerPool=All&limit=100`).then(r=>r.ok?r.json():null).catch(()=>null),
-      fetch(`${MLB_API}/teams/${PHILLIES_ID}/roster?rosterType=fullRoster&season=${SEASON}`).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(`${MLB_API}/teams/${PHILLIES_ID}/roster?rosterType=40Man&season=${SEASON}`).then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
     BAT_STATS=(bd?.stats?.[0]?.splits||[]).filter(p=>(p.stat.atBats||0)>0);
     PIT_STATS_ALL=(pd?.stats?.[0]?.splits||[]).filter(p=>(p.stat.gamesPlayed||0)>0);
-    // Build roster status map — IL players have status codes like D10, D15, D60
-    ROSTER_STATUS={};
+    // Build 40-man roster — anyone not here has been released/traded
+    ROSTER_STATUS={}; ROSTER_IDS=new Set();
     for(const p of (rd?.roster||[])){
+      const id=p.person?.id; if(!id) continue;
+      ROSTER_IDS.add(id);
       const code=p.status?.code||''; const desc=p.status?.description||'';
-      if(code&&code!=='A'&&p.person?.id) ROSTER_STATUS[p.person.id]={code,description:desc};
+      if(code&&code!=='A') ROSTER_STATUS[id]={code,description:desc};
     }
     PLAYER_LOADED=true;
     if(currentTab==='players'){const el=document.getElementById('players-c');if(el)el.innerHTML=renderPlayers();}
@@ -2022,16 +2025,17 @@ function renderOffense(){
     const av=parseFloat(a.stat[s.col])||0, bv=parseFloat(b.stat[s.col])||0;
     return s.dir===-1?bv-av:av-bv;
   };
-  const players=[...BAT_STATS].sort(sortFn);
-  const byHR=[...BAT_STATS].sort((a,b)=>(b.stat.homeRuns||0)-(a.stat.homeRuns||0));
-  const byRBI=[...BAT_STATS].sort((a,b)=>(b.stat.rbi||0)-(a.stat.rbi||0));
-  const qual=BAT_STATS.filter(p=>(p.stat.atBats||0)>=30);
+  const active40=ROSTER_IDS.size>0?BAT_STATS.filter(p=>ROSTER_IDS.has(p.player.id)):BAT_STATS;
+  const players=[...active40].sort(sortFn);
+  const byHR=[...active40].sort((a,b)=>(b.stat.homeRuns||0)-(a.stat.homeRuns||0));
+  const byRBI=[...active40].sort((a,b)=>(b.stat.rbi||0)-(a.stat.rbi||0));
+  const qual=active40.filter(p=>(p.stat.atBats||0)>=30);
   const byAVG=[...qual].sort((a,b)=>parseFloat(b.stat.avg||0)-parseFloat(a.stat.avg||0));
   const byOPS=[...qual].sort((a,b)=>parseFloat(b.stat.ops||0)-parseFloat(a.stat.ops||0));
   const col=s.col,dir=s.dir;
   const th=(lbl,key,title='')=>{const sorted=key===col;const arr=sorted?(dir===-1?'↓':'↑'):'';return`<th onclick="sortPl('offense','${key}')" class="${sorted?'pl-sorted':''}" title="${title}">${lbl}${arr?' '+arr:''}</th>`;};
   const streaksLoaded=Object.keys(PLAYER_STREAKS).length>0;
-  const ilHitters=BAT_STATS.filter(p=>ROSTER_STATUS[p.player.id]);
+  const ilHitters=players.filter(p=>ROSTER_STATUS[p.player.id]);
   const rows=players.map(p=>{
     const st=p.stat,pid=p.player.id;
     const sk=PLAYER_STREAKS[pid];
@@ -2086,7 +2090,8 @@ function renderOffense(){
 
 function renderStartersPl(){
   if(!PIT_STATS_ALL||!PIT_STATS_ALL.length)return'<div style="color:var(--t4);text-align:center;padding:32px;font-size:.72rem">No pitching data yet.</div>';
-  const starters=PIT_STATS_ALL.filter(p=>(p.stat.gamesStarted||0)>=1);
+  const pit40=ROSTER_IDS.size>0?PIT_STATS_ALL.filter(p=>ROSTER_IDS.has(p.player.id)):PIT_STATS_ALL;
+  const starters=pit40.filter(p=>(p.stat.gamesStarted||0)>=1);
   if(!starters.length)return'<div style="color:var(--t4);text-align:center;padding:32px;font-size:.72rem">No starters data yet.</div>';
   const s=plSortSp;
   const sortFn=(a,b)=>{
@@ -2156,7 +2161,8 @@ function renderStartersPl(){
 
 function renderBullpenPl(){
   if(!PIT_STATS_ALL||!PIT_STATS_ALL.length)return'<div style="color:var(--t4);text-align:center;padding:32px;font-size:.72rem">No pitching data yet.</div>';
-  const rp=PIT_STATS_ALL.filter(p=>(p.stat.gamesStarted||0)===0||(p.stat.gamesStarted||0)/(p.stat.gamesPlayed||1)<0.25);
+  const pit40=ROSTER_IDS.size>0?PIT_STATS_ALL.filter(p=>ROSTER_IDS.has(p.player.id)):PIT_STATS_ALL;
+  const rp=pit40.filter(p=>(p.stat.gamesStarted||0)===0||(p.stat.gamesStarted||0)/(p.stat.gamesPlayed||1)<0.25);
   if(!rp.length)return'<div style="color:var(--t4);text-align:center;padding:32px;font-size:.72rem">No bullpen data yet.</div>';
   const s=plSortBp;
   const sortFn=(a,b)=>{
