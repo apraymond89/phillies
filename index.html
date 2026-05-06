@@ -1197,6 +1197,7 @@
 <script>
 // ─── CONFIG ────────────────────────────────────────────────────────────────
 const PHILLIES_ID = 143, SEASON = 2026;
+let IL_PLAYERS = new Set();
 const MLB_API = 'https://statsapi.mlb.com/api/v1';
 let ALL=[], STANDINGS=[], cdTimer=null, currentTab='next', loading=false;
 
@@ -1465,11 +1466,11 @@ function renderLiveBatting() {
       const nm=p.person?.fullName||'?', pos=p.position?.abbreviation||'', bat=p.stats?.batting||{};
       const short=nm.split(' ').map((w,i,a)=>i===a.length-1?w:w[0]+'.').join(' ');
       const avg=p.seasonStats?.batting?.avg||'.---';
-      return`<tr><td class="lb-pos">${pos}</td><td class="lb-name">${short}</td><td>${bat.atBats??''}</td><td>${bat.runs??''}</td><td>${bat.hits??''}</td><td>${bat.rbi??''}</td><td>${bat.baseOnBalls??''}</td><td>${bat.strikeOuts??''}</td><td style="color:var(--t3)">${avg}</td></tr>`;
+      return`<tr><td class="lb-pos">${pos}</td><td class="lb-name">${short}</td><td>${bat.atBats??''}</td><td>${bat.runs??''}</td><td>${bat.hits??''}</td><td>${bat.homeRuns??''}</td><td>${bat.rbi??''}</td><td>${bat.baseOnBalls??''}</td><td>${bat.strikeOuts??''}</td><td style="color:var(--t3)">${avg}</td></tr>`;
     }).filter(Boolean).join('');
     return`<div class="lb-team-hdr ${cls}">${lbl}</div>
       <div class="lb-tbl-wrap"><table class="lb-tbl">
-        <thead><tr><th>POS</th><th style="text-align:left">Player</th><th>AB</th><th>R</th><th>H</th><th>RBI</th><th>BB</th><th>K</th><th>AVG</th></tr></thead>
+        <thead><tr><th>POS</th><th style="text-align:left">Player</th><th>AB</th><th>R</th><th>H</th><th>HR</th><th>RBI</th><th>BB</th><th>K</th><th>AVG</th></tr></thead>
         <tbody>${rows||'<tr><td colspan="9" style="color:var(--t4);text-align:center;padding:12px;font-size:.64rem">No lineup data yet</td></tr>'}</tbody>
       </table></div>`;
   };
@@ -1490,11 +1491,11 @@ function renderLivePitching() {
       const nm=p.person?.fullName||'?', pit=p.stats?.pitching||{};
       const short=nm.split(' ').map((w,i,a)=>i===a.length-1?w:w[0]+'.').join(' ');
       const era=p.seasonStats?.pitching?.era||'—';
-      return`<tr><td class="lb-name">${short}</td><td>${pit.inningsPitched||'0.0'}</td><td>${pit.hits??''}</td><td>${pit.runs??''}</td><td>${pit.earnedRuns??''}</td><td>${pit.baseOnBalls??''}</td><td>${pit.strikeOuts??''}</td><td>${pit.pitchesThrown??''}</td><td style="color:var(--t3)">${era}</td></tr>`;
+      return`<tr><td class="lb-name">${short}</td><td>${pit.inningsPitched||'0.0'}</td><td>${pit.hits??''}</td><td>${pit.runs??''}</td><td>${pit.earnedRuns??''}</td><td>${pit.baseOnBalls??''}</td><td>${pit.strikeOuts??''}</td><td>${pit.pitchesThrown??''}</td><td>${pit.strikes??''}</td><td>${pit.balls??''}</td><td style="color:var(--t3)">${era}</td></tr>`;
     }).filter(Boolean).join('');
     return`<div class="lb-team-hdr ${cls}">${lbl}</div>
       <div class="lb-tbl-wrap"><table class="lb-tbl">
-        <thead><tr><th style="text-align:left">Pitcher</th><th>IP</th><th>H</th><th>R</th><th>ER</th><th>BB</th><th>K</th><th>P</th><th>ERA</th></tr></thead>
+        <thead><tr><th style="text-align:left">Pitcher</th><th>IP</th><th>H</th><th>R</th><th>ER</th><th>BB</th><th>K</th><th>P</th><th>S</th><th>B</th><th>ERA</th></tr></thead>
         <tbody>${rows||'<tr><td colspan="9" style="color:var(--t4);text-align:center;padding:12px;font-size:.64rem">No pitching data yet</td></tr>'}</tbody>
       </table></div>`;
   };
@@ -1544,9 +1545,10 @@ function renderInningTracker(g) {
   const lastName=n=>n?n.split(' ').slice(-1)[0]:'';
   const batterName=g.batter?lastName(g.batter):'';
   const pitcherName=g.pitcher?lastName(g.pitcher):'';
+  const pitchCount=(()=>{if(!g.pitcherId||!LIVE_BOX)return null;const home=LIVE_BOX.teams?.home?.players?.[`ID${g.pitcherId}`];const away=LIVE_BOX.teams?.away?.players?.[`ID${g.pitcherId}`];const p=home||away;return p?.stats?.pitching?.pitchesThrown??null;})();
   const playersHtml=(batterName||pitcherName)?`<div class="ab-players">
     ${batterName?`<div class="ab-player-item"><div class="ab-player-lbl">AT BAT</div><div class="ab-player-name">${batterName}</div></div>`:''}
-    ${pitcherName?`<div class="ab-player-item"><div class="ab-player-lbl">PITCHING</div><div class="ab-player-name">${pitcherName}</div></div>`:''}
+    ${pitcherName?`<div class="ab-player-item"><div class="ab-player-lbl">PITCHING</div><div class="ab-player-name">${pitcherName}${pitchCount!=null?`<span style="font-size:.42rem;color:var(--t3);font-weight:500;margin-left:3px">${pitchCount}P</span>`:''}</div></div>`:''}
   </div>`:'';
 
   return`<div class="ab-card">
@@ -2012,6 +2014,7 @@ function setStdFilter(f){stdFilter=f;document.getElementById('standings-c').inne
 
 // ─── PLAYERS TAB ──────────────────────────────────────────────────────────────
 let BAT_STATS=null, PIT_STATS_ALL=null, PLAYER_LOADED=false, PLAYER_LOADING=false;
+    IL_PLAYERS=new Set((ild?.roster||[]).map(p=>p.person?.id).filter(Boolean));
 let PLAYER_STREAKS={}; // playerId -> { hit:N, cold:N }
 let plSubTab='offense';
 let plSortOff={col:'ops',dir:-1}, plSortSp={col:'era',dir:1}, plSortBp={col:'era',dir:1};
@@ -2028,9 +2031,10 @@ function sortPl(tab,col){
 async function loadPlayerStats(){
   if(PLAYER_LOADING)return; PLAYER_LOADING=true;
   try{
-    const[bd,pd]=await Promise.all([
+    const[bd,pd,ild]=await Promise.all([
       fetch(`${MLB_API}/stats?stats=season&group=hitting&teamId=${PHILLIES_ID}&season=${SEASON}&gameType=R&playerPool=All&limit=100`).then(r=>r.ok?r.json():null).catch(()=>null),
       fetch(`${MLB_API}/stats?stats=season&group=pitching&teamId=${PHILLIES_ID}&season=${SEASON}&gameType=R&playerPool=All&limit=100`).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(`${MLB_API}/teams/${PHILLIES_ID}/roster?rosterType=injuredList&season=${SEASON}`).then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
     BAT_STATS=(bd?.stats?.[0]?.splits||[]).filter(p=>(p.stat.atBats||0)>0);
     PIT_STATS_ALL=(pd?.stats?.[0]?.splits||[]).filter(p=>(p.stat.gamesPlayed||0)>0);
@@ -2100,8 +2104,9 @@ function renderOffense(){
     const st=p.stat,pid=p.player.id;
     const sk=PLAYER_STREAKS[pid];
     const streakBadge=sk?(sk.hit>=2?`<span class="pl-streak hot">🔥${sk.hit}</span>`:sk.cold>=5?`<span class="pl-streak cold">🥶${sk.cold}</span>`:''): '';
+    const ilBadge=IL_PLAYERS.has(pid)?'<span class="pl-streak" style="color:var(--gold);font-size:.65rem" title="Injured List">🩹</span>':'';
     return`<tr style="cursor:pointer" onclick="showPlayerLog(${pid},'${p.player.fullName.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','hitting')">
-      <td>${p.player.fullName}${streakBadge}</td>
+      <td>${p.player.fullName}${streakBadge}${ilBadge}</td>
       <td>${st.gamesPlayed||0}</td>
       <td>${st.avg||'.---'}</td>
       <td>${st.homeRuns||0}</td>
@@ -2121,7 +2126,7 @@ function renderOffense(){
       ${plLdrCard('Batting Avg',byAVG[0],byAVG[0]?.stat.avg||'.---',`${byAVG[0]?.stat.atBats||0} AB · min 30`)}
       ${plLdrCard('OPS',byOPS[0],byOPS[0]?.stat.ops||'.---',`OBP ${byOPS[0]?.stat.obp||0}`)}
     </div>
-    <div class="pl-section-lbl">All Hitters · ${players.length} players · Click column to sort${streaksLoaded?' · 🔥 hit streak · 🥶 hitless (5+)':' · Loading streaks…'}</div>
+    <div class="pl-section-lbl">All Hitters · ${players.length} players · Click column to sort${streaksLoaded?' · 🔥 hit streak · 🥶 hitless (5+) · 🩹 IL':' · Loading streaks…'}</div>
     <div class="pl-tbl-wrap"><table class="pl-tbl">
       <thead><tr>
         <th onclick="sortPl('offense','avg')" style="text-align:left">Player</th>
@@ -2163,8 +2168,9 @@ function renderStartersPl(){
     const st=p.stat;
     const qs=st.qualityStarts!==undefined?st.qualityStarts:'—';
     const k9=ipDec(st.inningsPitched)>0?((st.strikeOuts||0)/ipDec(st.inningsPitched)*9).toFixed(1):'—';
+    const ilBadgePit=IL_PLAYERS.has(p.player.id)?'<span class="pl-streak" style="color:var(--gold);font-size:.65rem" title="Injured List">🩹</span>':'';
     return`<tr style="cursor:pointer" onclick="showPlayerLog(${p.player.id},'${p.player.fullName.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','pitching')">
-      <td>${p.player.fullName}</td>
+      <td>${p.player.fullName}${ilBadgePit}</td>
       <td style="text-align:center">${st.wins||0}-${st.losses||0}</td>
       <td>${st.era||'—'}</td>
       <td>${st.whip||'—'}</td>
@@ -2225,8 +2231,9 @@ function renderBullpenPl(){
     const bs=st.blownSaves!==undefined?st.blownSaves:'—';
     const sv=st.saves||0,svo=st.saveOpportunities||0;
     const k9=ipDec(st.inningsPitched)>0?((st.strikeOuts||0)/ipDec(st.inningsPitched)*9).toFixed(1):'—';
+    const ilBadgePit=IL_PLAYERS.has(p.player.id)?'<span class="pl-streak" style="color:var(--gold);font-size:.65rem" title="Injured List">🩹</span>':'';
     return`<tr style="cursor:pointer" onclick="showPlayerLog(${p.player.id},'${p.player.fullName.replace(/'/g,'\\\'').replace(/"/g,'&quot;')}','pitching')">
-      <td>${p.player.fullName}</td>
+      <td>${p.player.fullName}${ilBadgePit}</td>
       <td style="text-align:center">${st.wins||0}-${st.losses||0}</td>
       <td>${st.era||'—'}</td>
       <td>${sv}${svo>0?`<span style="color:var(--t3);font-size:.52rem">/${svo}</span>`:''}</td>
@@ -2342,6 +2349,7 @@ async function pollLiveGame() {
       offense:ls.offense||null,
       batter:ls.offense?.batter?.fullName||null,
       pitcher:ls.defense?.pitcher?.fullName||null,
+      pitcherId:ls.defense?.pitcher?.id||null,
     };
 
     // If game just ended, reset live stats state and do a full reload
