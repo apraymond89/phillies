@@ -1720,7 +1720,8 @@ function renderSeries() {
   for(const grp of grps){const r=seriesResult(grp.games);const done=grp.games.every(x=>x.played||x.inProgress);if(!done&&r!=='live')continue;if(r==='won'||r==='sweep')sw++;else if(r==='lost'||r==='swept')sl++;else if(r==='split')ss++;}
   const tot=sw+sl+ss,pct=tot>0?(sw/tot*100).toFixed(1)+'%':'—';
 
-  const pills=grps.filter(g=>g.games.some(x=>x.played)).slice(-12).map(grp=>{const r=seriesResult(grp.games);const cls=(r==='won'||r==='sweep')?'w':(r==='lost'||r==='swept')?'l':'s';const lbl=(r==='won'||r==='sweep')?'W':(r==='lost'||r==='swept')?'L':'S';return`<div class="pill ${cls}">${lbl}</div>`;}).join('');
+  const finalResults=new Set(['won','lost','sweep','swept','split']);
+  const pills=grps.filter(g=>finalResults.has(seriesResult(g.games))).slice(-12).map(grp=>{const r=seriesResult(grp.games);const cls=(r==='won'||r==='sweep')?'w':(r==='lost'||r==='swept')?'l':'s';const lbl=(r==='won'||r==='sweep')?'W':(r==='lost'||r==='swept')?'L':'S';return`<div class="pill ${cls}">${lbl}</div>`;}).join('');
 
   // Pace
   let paceHtml='';
