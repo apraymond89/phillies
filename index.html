@@ -1462,6 +1462,7 @@ function renderLiveBatting() {
     const rows=ids.map(id=>{
       const p=ps[`ID${id}`]; if(!p) return'';
       const nm=p.person?.fullName||'?', pos=p.position?.abbreviation||'', bat=p.stats?.batting||{};
+      if(pos==='P') return'';
       const short=nm.split(' ').map((w,i,a)=>i===a.length-1?w:w[0]+'.').join(' ');
       const avg=p.seasonStats?.batting?.avg||'.---';
       return`<tr><td class="lb-pos">${pos}</td><td class="lb-name">${short}</td><td>${bat.atBats??''}</td><td>${bat.runs??''}</td><td>${bat.hits??''}</td><td>${bat.homeRuns??''}</td><td>${bat.rbi??''}</td><td>${bat.baseOnBalls??''}</td><td>${bat.strikeOuts??''}</td><td style="color:var(--t3)">${avg}</td></tr>`;
