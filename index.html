@@ -1602,6 +1602,7 @@ function renderNext() {
   const metaGrid=`<div class="ng-meta">
     <div class="ng-meta-item"><div class="ng-meta-lbl">📅 Date</div><div class="ng-meta-val">${date}</div></div>
     <div class="ng-meta-item"><div class="ng-meta-lbl">🕐 First Pitch</div><div class="ng-meta-val">${time}</div></div>
+    <div class="ng-meta-item" style="grid-column:1/-1"><div class="ng-meta-lbl">🏟️ Venue</div><div class="ng-meta-val">${g.venue||'—'}</div></div>
   </div>`;
 
   const tvRows=g.broadcasts.length
@@ -1616,9 +1617,13 @@ function renderNext() {
     const heroBlock=`<div class="ng-hero">
       <div class="ng-label">${g.postponed?'⚠️ Postponed':'Next Game'}</div>
       <div class="ng-matchup">
-        <div class="ng-team"><span class="ng-emoji">🔔</span><div class="ng-tname phils">Phillies</div></div>
-        <div class="ng-vs">vs</div>
-        <div class="ng-team"><span class="ng-emoji">${ti.e}</span><div class="ng-tname">${g.opponent}</div></div>
+        ${g.isHome
+          ?`<div class="ng-team"><span class="ng-emoji">${ti.e}</span><div class="ng-tname">${g.opponent}</div></div>
+            <div class="ng-vs">@</div>
+            <div class="ng-team"><span class="ng-emoji">🔔</span><div class="ng-tname phils">Phillies</div></div>`
+          :`<div class="ng-team"><span class="ng-emoji">🔔</span><div class="ng-tname phils">Phillies</div></div>
+            <div class="ng-vs">@</div>
+            <div class="ng-team"><span class="ng-emoji">${ti.e}</span><div class="ng-tname">${g.opponent}</div></div>`}
       </div>
       ${cdBlock}
     </div>`;
@@ -1643,9 +1648,13 @@ function renderNext() {
   const heroBlock=`<div class="ng-hero">
     <div class="ng-label">${g.inProgress?'<span class="live-dot"></span>Live Now':'Final'}</div>
     <div class="ng-matchup">
-      <div class="ng-team"><span class="ng-emoji">🔔</span><div class="ng-tname phils">Phillies</div></div>
-      <div class="ng-vs">vs</div>
-      <div class="ng-team"><span class="ng-emoji">${ti.e}</span><div class="ng-tname">${g.opponent}</div></div>
+      ${g.isHome
+        ?`<div class="ng-team"><span class="ng-emoji">${ti.e}</span><div class="ng-tname">${g.opponent}</div></div>
+           <div class="ng-vs">@</div>
+           <div class="ng-team"><span class="ng-emoji">🔔</span><div class="ng-tname phils">Phillies</div></div>`
+        :`<div class="ng-team"><span class="ng-emoji">🔔</span><div class="ng-tname phils">Phillies</div></div>
+           <div class="ng-vs">@</div>
+           <div class="ng-team"><span class="ng-emoji">${ti.e}</span><div class="ng-tname">${g.opponent}</div></div>`}
     </div>
     ${scoreBlock}
   </div>`;
