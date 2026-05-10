@@ -1690,16 +1690,12 @@ function renderNext() {
 
   // ── LIVE / FINAL ──
   const phW=g.phillies>g.opp, oppW=g.opp>g.phillies;
+  const phiSide=`<div class="score-side"><div class="score-num ${phW?'ahead':oppW?'behind':'tied-c'}">${g.phillies}</div><div class="score-lbl">PHI</div></div>`;
+  const oppSide=`<div class="score-side"><div class="score-num ${oppW?'ahead':phW?'behind':'tied-c'}">${g.opp}</div><div class="score-lbl">${ti.a}</div></div>`;
   const scoreBlock=`<div class="score-block">
-    <div class="score-side">
-      <div class="score-num ${phW?'ahead':oppW?'behind':'tied-c'}">${g.phillies}</div>
-      <div class="score-lbl">PHI</div>
-    </div>
+    ${g.isHome?oppSide:phiSide}
     <div class="score-divider"></div>
-    <div class="score-side">
-      <div class="score-num ${oppW?'ahead':phW?'behind':'tied-c'}">${g.opp}</div>
-      <div class="score-lbl">${ti.a}</div>
-    </div>
+    ${g.isHome?phiSide:oppSide}
   </div>
   <div class="score-status-row">${g.inProgress?`<span class="live-dot"></span>${g.inningStr||'In Progress'}`:`Final · ${phW?'✅ Win':'❌ Loss'}`}</div>`;
 
