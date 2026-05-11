@@ -226,12 +226,12 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: 0;
     margin-bottom: 18px;
   }
-  .ng-team { text-align: center; }
+  .ng-team { text-align: center; flex: 1; min-width: 0; }
   .ng-emoji { font-size: 2.8rem; display: block; margin-bottom: 4px; line-height: 1; }
-  .ng-tname { font-size: 0.82rem; font-weight: 700; color: var(--t1); }
+  .ng-tname { font-size: 0.82rem; font-weight: 700; color: var(--t1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ng-tname.phils { color: var(--red); }
   .ng-vs {
     font-size: 0.6rem;
@@ -242,6 +242,8 @@
     border: 1px solid var(--s3);
     border-radius: 20px;
     background: var(--s2);
+    flex-shrink: 0;
+    margin: 0 12px;
   }
   .ng-meta {
     display: grid;
@@ -1622,13 +1624,9 @@ function renderInningTracker(g) {
 function renderNext() {
   if (!ALL.length) return '<div class="loading">No schedule data.</div>';
   const td=todayStr(), isDefaultView=viewingGameIdx===null;
-  // If default view and no game today, show no-game message + next upcoming below
-  if (isDefaultView && !ALL.some(g=>g.d===td)) {
-    const next=ALL.find(g=>!g.played&&!g.postponed&&new Date(`${g.d}T${g.t}Z`).getTime()>Date.now());
-    const nextBlurb=next?`<div style="margin-top:12px;font-size:.72rem;color:var(--t2)">Next up: <strong style="color:var(--t1)">${pt(next.d,next.t).date} vs ${next.opponent}</strong></div>`:'';
-    return `<div class="content active" style="padding:48px 20px;text-align:center"><div style="font-size:2rem;margin-bottom:12px">🌙</div><div style="font-size:1rem;font-weight:700;color:var(--t1);letter-spacing:1px">No Game Today</div>${nextBlurb}</div>`;
-  }
-  const idx=getViewingIdx(), g=ALL[idx]||nextGame(), {date,time,ms}=pt(g.d,g.t);
+  const idx=getViewingIdx(), g=ALL[idx]||nextGame();
+  if(!g) return '<div class="loading">No schedule data.</div>';
+  const {date,time,ms}=pt(g.d,g.t);
   const ti=teamInfo(g.opponent);
   const navLabel=`${date} · ${g.isHome?'vs':'@'} ${g.opponent}`;
 
@@ -1637,6 +1635,11 @@ function renderNext() {
     <span class="ng-nav-label">${navLabel}</span>
     <button class="ng-nav-btn" onclick="navGame(1)" ${idx===ALL.length-1?'disabled':''}>Next ›</button>
   </div>`;
+
+  // If default view and no game today, show no-game message with nav
+  if (isDefaultView && !ALL.some(g=>g.d===td)) {
+    return navBar+`<div class="content active" style="padding:48px 20px;text-align:center"><div style="font-size:2rem;margin-bottom:12px">🌙</div><div style="font-size:1rem;font-weight:700;color:var(--t1);letter-spacing:1px">No Game Today</div><div style="margin-top:12px;font-size:.72rem;color:var(--t2)">Use the arrows above to browse upcoming or past games</div></div>`;
+  }
 
   const psStatRow=(id)=>{
     const s=id?PITCHER_STATS[id]:null;
