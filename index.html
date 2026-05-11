@@ -1636,10 +1636,6 @@ function renderNext() {
     <button class="ng-nav-btn" onclick="navGame(1)" ${idx===ALL.length-1?'disabled':''}>Next ›</button>
   </div>`;
 
-  // If default view and no game today, show no-game message with nav
-  if (isDefaultView && !ALL.some(g=>g.d===td)) {
-    return navBar+`<div class="content active" style="padding:48px 20px;text-align:center"><div style="font-size:2rem;margin-bottom:12px">🌙</div><div style="font-size:1rem;font-weight:700;color:var(--t1);letter-spacing:1px">No Game Today</div><div style="margin-top:12px;font-size:.72rem;color:var(--t2)">Use the arrows above to browse upcoming or past games</div></div>`;
-  }
 
   const psStatRow=(id)=>{
     const s=id?PITCHER_STATS[id]:null;
