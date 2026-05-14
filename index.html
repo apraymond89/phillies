@@ -263,18 +263,27 @@
   /* Weather bar */
   .wx-bar {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    align-items: stretch;
     background: var(--s2);
     border: 1px solid var(--s3);
     border-radius: var(--r-md);
-    padding: 9px 14px;
     margin-bottom: 14px;
-    font-size: 1.2rem;
+    overflow: hidden;
   }
+  .wx-entry {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 14px;
+  }
+  .wx-lbl { font-size: 0.44rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--t4); font-weight: 700; white-space: nowrap; }
+  .wx-icon { font-size: 1.2rem; line-height: 1; }
   .wx-temp { font-size: 0.82rem; font-weight: 700; color: var(--t1); }
-  .wx-desc { font-size: 0.66rem; color: var(--t3); flex: 1; }
-  .wx-precip { font-size: 0.6rem; color: var(--powder); background: rgba(99,179,237,.1); border: 1px solid rgba(99,179,237,.2); border-radius: 10px; padding: 2px 8px; }
+  .wx-desc { font-size: 0.62rem; color: var(--t3); flex: 1; }
+  .wx-precip { font-size: 0.56rem; color: var(--powder); background: rgba(99,179,237,.1); border: 1px solid rgba(99,179,237,.2); border-radius: 10px; padding: 2px 7px; white-space: nowrap; }
+  .wx-divider { width: 1px; background: var(--s3); align-self: stretch; }
+  .wx-compact { margin-bottom: 0; border-radius: 0; border-left: none; border-right: none; border-top: none; background: rgba(255,255,255,.03); }
 
   /* Score display */
   .score-block {
@@ -1500,8 +1509,12 @@ async function loadWeather(g){
   const coords=BALLPARK_COORDS[g.venue]||(g.isHome?[39.9056,-75.1665]:TEAM_COORDS[g.opponent]);
   if(!coords){renderTab('next');return;}
   const[lat,lon]=coords;
+  const isToday=g.d===todayStr();
   try{
-    const res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,weathercode,precipitation_probability&temperature_unit=fahrenheit&timezone=auto&start_date=${g.d}&end_date=${g.d}`);
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}`
+      +(isToday?`&current=temperature_2m,weathercode,precipitation`:'')
+      +`&hourly=temperature_2m,weathercode,precipitation_probability&temperature_unit=fahrenheit&timezone=auto&start_date=${g.d}&end_date=${g.d}`;
+    const res=await fetch(url);
     const data=await res.json();
     if(!data.hourly){renderTab('next');return;}
     const tz=data.timezone||'America/New_York';
@@ -1510,7 +1523,11 @@ async function loadWeather(g){
     const gameHour=parseInt(localHourStr);
     const hourIdx=data.hourly.time.findIndex(t=>parseInt(t.split('T')[1])===gameHour);
     const i=hourIdx>=0?hourIdx:18;
-    WEATHER_CACHE[g.gamePk]={temp:Math.round(data.hourly.temperature_2m[i]),code:data.hourly.weathercode[i],precip:data.hourly.precipitation_probability[i]};
+    const forecast={temp:Math.round(data.hourly.temperature_2m[i]),code:data.hourly.weathercode[i],precip:data.hourly.precipitation_probability[i]};
+    const current=isToday&&data.current
+      ?{temp:Math.round(data.current.temperature_2m),code:data.current.weathercode}
+      :null;
+    WEATHER_CACHE[g.gamePk]={forecast,current};
   }catch(e){WEATHER_CACHE[g.gamePk]=null;}
   renderTab('next');
 }
@@ -1790,10 +1807,22 @@ function renderNext() {
   if (!g.played && !g.inProgress) {
     // Weather
     if(WEATHER_CACHE[g.gamePk]===undefined) loadWeather(g);
-    const wx=WEATHER_CACHE[g.gamePk];
-    const weatherBar=wx
-      ?`<div class="wx-bar">${wmoEmoji(wx.code)}<span class="wx-temp">${wx.temp}°F</span><span class="wx-desc">${wmoDesc(wx.code)}</span>${wx.precip>10?`<span class="wx-precip">💧 ${wx.precip}% rain</span>`:''}</div>`
-      :(wx===null?'':'');
+    const wxData=WEATHER_CACHE[g.gamePk];
+    const wxEntry=(label,w,showPrecip=false)=>
+      `<div class="wx-entry">
+        <span class="wx-lbl">${label}</span>
+        <span class="wx-icon">${wmoEmoji(w.code)}</span>
+        <span class="wx-temp">${w.temp}°F</span>
+        <span class="wx-desc">${wmoDesc(w.code)}</span>
+        ${showPrecip&&w.precip>10?`<span class="wx-precip">💧 ${w.precip}% rain</span>`:''}
+      </div>`;
+    const weatherBar=wxData
+      ?`<div class="wx-bar">
+          ${wxData.current?wxEntry('Now',wxData.current):''}
+          ${wxData.current&&wxData.forecast?'<div class="wx-divider"></div>':''}
+          ${wxData.forecast?wxEntry('First Pitch',wxData.forecast,true):''}
+        </div>`
+      :'';
 
     const cdBlock=isDefaultView&&ms>Date.now()+60000?`<div class="countdown" style="margin-top:14px"><div class="cd-lbl">⏱ Time Until First Pitch</div><div class="cd-time" id="cdtime">—</div></div>`:'';
     const heroBlock=`<div class="ng-hero">
@@ -1841,7 +1870,24 @@ function renderNext() {
   const inningTracker=g.inProgress?renderInningTracker(g):'';
   const statsPanel=(g.inProgress||g.played)?renderLiveStatsCard(g):'';
 
-  return navBar+heroBlock+linescore+inningTracker+statsPanel+(g.played?'':pitcherCard+metaGrid+watchSection);
+  // Live game: show current weather only
+  let liveWeatherBar='';
+  if(g.inProgress){
+    if(WEATHER_CACHE[g.gamePk]===undefined) loadWeather(g);
+    const wxData=WEATHER_CACHE[g.gamePk];
+    if(wxData?.current){
+      liveWeatherBar=`<div class="wx-bar wx-compact">
+        <div class="wx-entry">
+          <span class="wx-lbl">Now at Ballpark</span>
+          <span class="wx-icon">${wmoEmoji(wxData.current.code)}</span>
+          <span class="wx-temp">${wxData.current.temp}°F</span>
+          <span class="wx-desc">${wmoDesc(wxData.current.code)}</span>
+        </div>
+      </div>`;
+    }
+  }
+
+  return navBar+heroBlock+linescore+inningTracker+liveWeatherBar+statsPanel+(g.played?'':pitcherCard+metaGrid+watchSection);
 }
 
 function startCd(ms) {
