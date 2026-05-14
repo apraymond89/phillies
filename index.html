@@ -285,6 +285,11 @@
   .wx-divider { width: 1px; background: var(--s3); align-self: stretch; }
   .wx-compact { margin-bottom: 0; border-radius: 0; border-left: none; border-right: none; border-top: none; background: rgba(255,255,255,.03); }
 
+  /* Postponed / Suspended / Cancelled */
+  .ppd-score { font-size: 1.1rem; font-weight: 900; font-family: 'Arial Black', Arial, sans-serif; color: var(--t2); margin: 8px 0 2px; letter-spacing: 1px; }
+  .ppd-innings { font-size: 0.56rem; font-weight: 400; color: var(--t4); letter-spacing: .5px; }
+  .ppd-note { font-size: 0.58rem; color: var(--t4); margin-top: 10px; font-style: italic; }
+
   /* Score display */
   .score-block {
     display: flex;
@@ -755,6 +760,7 @@
   .sr-g-result.l { color: var(--loss); }
   .sr-g-result.lv { color: var(--red); }
   .sr-g-tv { font-size: 0.4rem; color: var(--t4); margin-top: 2px; }
+  .sr-g-ppd-reason { font-size: 0.38rem; color: var(--t4); margin-top: 2px; font-style: italic; }
 
   /* ── STREAK VISUAL ── */
   .streak-card {
@@ -1305,7 +1311,10 @@ function parseGames(data) {
       const state=g.status?.abstractGameState||'', detail=g.status?.detailedState||'';
       const played=state==='Final'||detail.includes('Final')||detail==='Game Over';
       const inProgress=state==='Live'||detail==='In Progress';
-      const postponed=detail.includes('Postponed')||detail.includes('Suspended');
+      const suspended=detail.includes('Suspended');
+      const cancelled=detail.includes('Cancelled')||detail.includes('Canceled');
+      const postponed=detail.includes('Postponed')||suspended||cancelled;
+      const postponeReason=g.status?.reason||null;
       const hs=(played||inProgress)?(g.teams.home.score??null):null;
       const as_=(played||inProgress)?(g.teams.away.score??null):null;
       const broadcasts=(g.broadcasts||[]).filter(b=>b.type==='TV'&&(b.language==='en'||!b.language)).map(b=>b.name).filter((v,i,a)=>a.indexOf(v)===i);
@@ -1320,7 +1329,7 @@ function parseGames(data) {
       const philliesProbableId=isHome?(g.teams.home.probablePitcher?.id||null):(g.teams.away.probablePitcher?.id||null);
       const oppProbableId=isHome?(g.teams.away.probablePitcher?.id||null):(g.teams.home.probablePitcher?.id||null);
       const ls=g.linescore?{innings:g.linescore.innings||[],awayHits:g.linescore.teams?.away?.hits,homeHits:g.linescore.teams?.home?.hits,awayErrors:g.linescore.teams?.away?.errors,homeErrors:g.linescore.teams?.home?.errors}:null;
-      games.push({gamePk:g.gamePk,h:ht,a:at,d:dateObj.date,t:gameTimeUTC,broadcasts,tv:broadcasts[0]||'TBD',hs,as:as_,isHome,opponent,phillies:philliesScore,opp:oppScore,played,inProgress,postponed,status:detail,inningStr,venue:g.venue?.name||(isHome?'Citizens Bank Park':opponent),philliesProbable,oppProbable,philliesProbableId,oppProbableId,ls});
+      games.push({gamePk:g.gamePk,h:ht,a:at,d:dateObj.date,t:gameTimeUTC,broadcasts,tv:broadcasts[0]||'TBD',hs,as:as_,isHome,opponent,phillies:philliesScore,opp:oppScore,played,inProgress,postponed,suspended,cancelled,postponeReason,status:detail,inningStr,venue:g.venue?.name||(isHome?'Citizens Bank Park':opponent),philliesProbable,oppProbable,philliesProbableId,oppProbableId,ls});
     }
   }
   return games.sort((a,b)=>(a.d+a.t)>(b.d+b.t)?1:-1);
@@ -1824,9 +1833,34 @@ function renderNext() {
         </div>`
       :'';
 
+    // ── POSTPONED / SUSPENDED / CANCELLED ──
+    if(g.postponed){
+      const icon=g.cancelled?'🚫':g.suspended?'⏸️':'🌧️';
+      const statusLabel=g.cancelled?'Cancelled':g.suspended?'Suspended':'Postponed';
+      const reasonStr=g.postponeReason?` · ${g.postponeReason}`:'';
+      const suspendedScore=g.suspended&&g.phillies!=null
+        ?`<div class="ppd-score">${g.isHome?`${g.opp} – ${g.phillies}`:`${g.phillies} – ${g.opp}`} <span class="ppd-innings">(${g.inningStr||'suspended'})</span></div>`
+        :'';
+      const heroBlock=`<div class="ng-hero">
+        <div class="ng-label">${icon} ${statusLabel}${reasonStr}</div>
+        <div class="ng-matchup">
+          ${g.isHome
+            ?`<div class="ng-team"><span class="ng-emoji">${ti.e}</span><div class="ng-tname">${g.opponent}</div></div>
+              <div class="ng-vs">@</div>
+              <div class="ng-team"><span class="ng-emoji">🔔</span><div class="ng-tname phils">Phillies</div></div>`
+            :`<div class="ng-team"><span class="ng-emoji">🔔</span><div class="ng-tname phils">Phillies</div></div>
+              <div class="ng-vs">@</div>
+              <div class="ng-team"><span class="ng-emoji">${ti.e}</span><div class="ng-tname">${g.opponent}</div></div>`}
+        </div>
+        ${suspendedScore}
+        <div class="ppd-note">${g.suspended?'Game will be resumed from this point':'Makeup game will appear in the schedule when rescheduled'}</div>
+      </div>`;
+      return navBar+heroBlock;
+    }
+
     const cdBlock=isDefaultView&&ms>Date.now()+60000?`<div class="countdown" style="margin-top:14px"><div class="cd-lbl">⏱ Time Until First Pitch</div><div class="cd-time" id="cdtime">—</div></div>`:'';
     const heroBlock=`<div class="ng-hero">
-      <div class="ng-label">${g.postponed?'⚠️ Postponed':'Next Game'}</div>
+      <div class="ng-label">Next Game</div>
       <div class="ng-matchup">
         ${g.isHome
           ?`<div class="ng-team"><span class="ng-emoji">${ti.e}</span><div class="ng-tname">${g.opponent}</div></div>
@@ -1991,7 +2025,7 @@ function renderSeries() {
     const cols=grp.games.map((g,gi)=>{
       if(g.inProgress&&g.phillies!=null){const pa=g.phillies>=g.opp;return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-line ${pa?'row-win':''}"><span class="sr-g-abbr p">PHI</span><span class="sr-g-score live-s">${g.phillies}</span></div><div class="sr-g-line ${!pa?'row-win':''}"><span class="sr-g-abbr o">${ti.a}</span><span class="sr-g-score live-s">${g.opp}</span></div><div class="sr-g-result lv">LIVE</div></div>`;}
       if(g.played&&g.phillies!=null){const phiW=g.phillies>g.opp;const tv=g.broadcasts.length?getBc(g.broadcasts[0]):null;return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-line ${phiW?'row-win':''}"><span class="sr-g-abbr p ${phiW?'phi-win':'phi-loss'}">PHI</span><span class="sr-g-score ${phiW?'win':'lose'}">${g.phillies}</span></div><div class="sr-g-line ${!phiW?'row-win':''}"><span class="sr-g-abbr o">${ti.a}</span><span class="sr-g-score opp-score">${g.opp}</span></div><div class="sr-g-result ${phiW?'w':'l'}">${phiW?'WIN':'LOSS'}</div>${tv?`<div class="sr-g-tv">${tv.display.replace('NBC Sports Philly','NBCSP')}</div>`:''}</div>`;}
-      if(g.postponed)return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-score u">PPD</div></div>`;
+      if(g.postponed){const ppdLbl=g.cancelled?'CXL':g.suspended?'SUSP':'PPD';const ppdSub=g.postponeReason?`<div class="sr-g-ppd-reason">${g.postponeReason}</div>`:'';return`<div class="sr-game"${g.postponeReason?` title="${g.postponeReason}"`:''}><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-score u">${ppdLbl}</div>${ppdSub}</div>`;}
       const {timeShort,short}=pt(g.d,g.t);const tv=g.broadcasts.length?getBc(g.broadcasts[0]):null;
       return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-line"><span class="sr-g-abbr o" style="font-size:.44rem">${short}</span></div><div class="sr-g-score u">${timeShort}</div>${tv?`<div class="sr-g-tv">${tv.display.replace('NBC Sports Philly','NBCSP')}</div>`:''}</div>`;
     }).join('');
