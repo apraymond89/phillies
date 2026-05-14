@@ -260,6 +260,22 @@
   .ng-meta-lbl { font-size: 0.5rem; letter-spacing: 2px; text-transform: uppercase; color: var(--powder); margin-bottom: 4px; }
   .ng-meta-val { font-size: 0.78rem; font-weight: 700; color: var(--t1); }
 
+  /* Weather bar */
+  .wx-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--s2);
+    border: 1px solid var(--s3);
+    border-radius: var(--r-md);
+    padding: 9px 14px;
+    margin-bottom: 14px;
+    font-size: 1.2rem;
+  }
+  .wx-temp { font-size: 0.82rem; font-weight: 700; color: var(--t1); }
+  .wx-desc { font-size: 0.66rem; color: var(--t3); flex: 1; }
+  .wx-precip { font-size: 0.6rem; color: var(--powder); background: rgba(99,179,237,.1); border: 1px solid rgba(99,179,237,.2); border-radius: 10px; padding: 2px 8px; }
+
   /* Score display */
   .score-block {
     display: flex;
@@ -1396,6 +1412,108 @@ let LIVE_STATS_GAME=null; // the game object currently shown in the stats panel
 
 // ─── PITCHER STATS TOGGLE ──────────────────────────────────────────────────
 let PITCHER_STATS={}; // id -> {era, wins, losses, strikeOuts, hand}
+
+// ─── WEATHER ───────────────────────────────────────────────────────────────
+let WEATHER_CACHE={}; // gamePk -> weather object | null (loading) | undefined (not fetched)
+
+const BALLPARK_COORDS={
+  'Citizens Bank Park':[39.9056,-75.1665],
+  'Yankee Stadium':[40.8296,-73.9262],
+  'Citi Field':[40.7571,-73.8458],
+  'Fenway Park':[42.3467,-71.0972],
+  'Camden Yards':[39.2838,-76.6218],'Oriole Park at Camden Yards':[39.2838,-76.6218],
+  'Nationals Park':[38.8731,-77.0075],
+  'Truist Park':[33.8908,-84.4678],
+  'loanDepot park':[25.7781,-80.2197],'LoanDepot Park':[25.7781,-80.2197],
+  'American Family Field':[43.0280,-87.9712],
+  'Wrigley Field':[41.9484,-87.6553],
+  'Great American Ball Park':[39.0974,-84.5082],
+  'PNC Park':[40.4469,-80.0057],
+  'Busch Stadium':[38.6226,-90.1928],
+  'Chase Field':[33.4453,-112.0667],
+  'Dodger Stadium':[34.0739,-118.2400],
+  'Oracle Park':[37.7786,-122.3893],
+  'Petco Park':[32.7073,-117.1570],
+  'Coors Field':[39.7559,-104.9942],
+  'Globe Life Field':[32.7473,-97.0832],
+  'Minute Maid Park':[29.7573,-95.3555],
+  'Angel Stadium':[33.8003,-117.8827],
+  'T-Mobile Park':[47.5914,-122.3325],
+  'Oakland Coliseum':[37.7516,-122.2005],'RingCentral Coliseum':[37.7516,-122.2005],
+  'Target Field':[44.9817,-93.2781],
+  'Guaranteed Rate Field':[41.8300,-87.6338],
+  'Comerica Park':[42.3390,-83.0485],
+  'Progressive Field':[41.4962,-81.6852],
+  'Kauffman Stadium':[39.0516,-94.4803],
+  'Tropicana Field':[27.7683,-82.6534],
+  'Rogers Centre':[43.6414,-79.3894],
+};
+// Fallback by opponent name
+const TEAM_COORDS={
+  'New York Yankees':[40.8296,-73.9262],'New York Mets':[40.7571,-73.8458],
+  'Boston Red Sox':[42.3467,-71.0972],'Baltimore Orioles':[39.2838,-76.6218],
+  'Washington Nationals':[38.8731,-77.0075],'Atlanta Braves':[33.8908,-84.4678],
+  'Miami Marlins':[25.7781,-80.2197],'Milwaukee Brewers':[43.0280,-87.9712],
+  'Chicago Cubs':[41.9484,-87.6553],'Cincinnati Reds':[39.0974,-84.5082],
+  'Pittsburgh Pirates':[40.4469,-80.0057],'St. Louis Cardinals':[38.6226,-90.1928],
+  'Arizona Diamondbacks':[33.4453,-112.0667],'Los Angeles Dodgers':[34.0739,-118.2400],
+  'San Francisco Giants':[37.7786,-122.3893],'San Diego Padres':[32.7073,-117.1570],
+  'Colorado Rockies':[39.7559,-104.9942],'Texas Rangers':[32.7473,-97.0832],
+  'Houston Astros':[29.7573,-95.3555],'Los Angeles Angels':[33.8003,-117.8827],
+  'Seattle Mariners':[47.5914,-122.3325],'Oakland Athletics':[37.7516,-122.2005],
+  'Minnesota Twins':[44.9817,-93.2781],'Chicago White Sox':[41.8300,-87.6338],
+  'Detroit Tigers':[42.3390,-83.0485],'Cleveland Guardians':[41.4962,-81.6852],
+  'Kansas City Royals':[39.0516,-94.4803],'Tampa Bay Rays':[27.7683,-82.6534],
+  'Toronto Blue Jays':[43.6414,-79.3894],
+};
+
+function wmoEmoji(code){
+  if(code===0) return'☀️';
+  if(code<=1) return'🌤️';
+  if(code<=2) return'⛅';
+  if(code<=3) return'☁️';
+  if(code<=48) return'🌫️';
+  if(code<=55) return'🌦️';
+  if(code<=67) return'🌧️';
+  if(code<=77) return'🌨️';
+  if(code<=82) return'🌦️';
+  if(code<=86) return'🌨️';
+  return'⛈️';
+}
+function wmoDesc(code){
+  if(code===0) return'Clear';
+  if(code<=1) return'Mostly Clear';
+  if(code<=2) return'Partly Cloudy';
+  if(code<=3) return'Overcast';
+  if(code<=48) return'Foggy';
+  if(code<=55) return'Drizzle';
+  if(code<=67) return'Rainy';
+  if(code<=77) return'Snow';
+  if(code<=82) return'Showers';
+  if(code<=86) return'Snow Showers';
+  return'Thunderstorms';
+}
+
+async function loadWeather(g){
+  if(WEATHER_CACHE[g.gamePk]!==undefined) return;
+  WEATHER_CACHE[g.gamePk]=null; // mark loading
+  const coords=BALLPARK_COORDS[g.venue]||(g.isHome?[39.9056,-75.1665]:TEAM_COORDS[g.opponent]);
+  if(!coords){renderTab('next');return;}
+  const[lat,lon]=coords;
+  try{
+    const res=await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,weathercode,precipitation_probability&temperature_unit=fahrenheit&timezone=auto&start_date=${g.d}&end_date=${g.d}`);
+    const data=await res.json();
+    if(!data.hourly){renderTab('next');return;}
+    const tz=data.timezone||'America/New_York';
+    const gameMsUTC=new Date(`${g.d}T${g.t}Z`).getTime();
+    const localHourStr=new Date(gameMsUTC).toLocaleString('en-US',{hour:'2-digit',hour12:false,timeZone:tz});
+    const gameHour=parseInt(localHourStr);
+    const hourIdx=data.hourly.time.findIndex(t=>parseInt(t.split('T')[1])===gameHour);
+    const i=hourIdx>=0?hourIdx:18;
+    WEATHER_CACHE[g.gamePk]={temp:Math.round(data.hourly.temperature_2m[i]),code:data.hourly.weathercode[i],precip:data.hourly.precipitation_probability[i]};
+  }catch(e){WEATHER_CACHE[g.gamePk]=null;}
+  renderTab('next');
+}
 let pitcherStatsOpen=false;
 
 async function loadPitcherStats(g) {
@@ -1670,6 +1788,13 @@ function renderNext() {
 
   // ── PRE-GAME ──
   if (!g.played && !g.inProgress) {
+    // Weather
+    if(WEATHER_CACHE[g.gamePk]===undefined) loadWeather(g);
+    const wx=WEATHER_CACHE[g.gamePk];
+    const weatherBar=wx
+      ?`<div class="wx-bar">${wmoEmoji(wx.code)}<span class="wx-temp">${wx.temp}°F</span><span class="wx-desc">${wmoDesc(wx.code)}</span>${wx.precip>10?`<span class="wx-precip">💧 ${wx.precip}% rain</span>`:''}</div>`
+      :(wx===null?'':'');
+
     const cdBlock=isDefaultView&&ms>Date.now()+60000?`<div class="countdown" style="margin-top:14px"><div class="cd-lbl">⏱ Time Until First Pitch</div><div class="cd-time" id="cdtime">—</div></div>`:'';
     const heroBlock=`<div class="ng-hero">
       <div class="ng-label">${g.postponed?'⚠️ Postponed':'Next Game'}</div>
@@ -1684,7 +1809,7 @@ function renderNext() {
       </div>
       ${cdBlock}
     </div>`;
-    return navBar+heroBlock+pitcherCard+metaGrid+watchSection;
+    return navBar+heroBlock+pitcherCard+metaGrid+weatherBar+watchSection;
   }
 
   // ── LIVE / FINAL ──
