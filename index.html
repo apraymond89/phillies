@@ -1320,8 +1320,10 @@ function parseGames(data) {
       const broadcasts=(g.broadcasts||[]).filter(b=>b.type==='TV'&&(b.language==='en'||!b.language)).map(b=>b.name).filter((v,i,a)=>a.indexOf(v)===i);
       const opponent=isHome?at.replace('Philadelphia ',''):ht.replace('Philadelphia ','');
       const philliesScore=isHome?hs:as_, oppScore=isHome?as_:hs;
-      let gameTimeUTC='18:00:00';
-      if (g.gameDate) gameTimeUTC=g.gameDate.split('T')[1]?.replace('Z','')||'18:00:00';
+      // Store the full UTC ISO string — never reconstruct from local date + UTC time separately
+      // because the UTC date may differ from the local game date (west coast night games)
+      const gameISO=g.gameDate||(dateObj.date+'T18:00:00Z');
+      const gameTimeUTC=gameISO.split('T')[1]?.replace('Z','')||'18:00:00';
       let inningStr='';
       if (inProgress&&g.linescore){const inn=g.linescore.currentInning||'',half=g.linescore.inningHalf||'';if(inn)inningStr=`${half==='Top'?'Top':'Bot'} ${inn}${inn===1?'st':inn===2?'nd':inn===3?'rd':'th'}`;}
       const philliesProbable=isHome?(g.teams.home.probablePitcher?.fullName||null):(g.teams.away.probablePitcher?.fullName||null);
@@ -1329,10 +1331,10 @@ function parseGames(data) {
       const philliesProbableId=isHome?(g.teams.home.probablePitcher?.id||null):(g.teams.away.probablePitcher?.id||null);
       const oppProbableId=isHome?(g.teams.away.probablePitcher?.id||null):(g.teams.home.probablePitcher?.id||null);
       const ls=g.linescore?{innings:g.linescore.innings||[],awayHits:g.linescore.teams?.away?.hits,homeHits:g.linescore.teams?.home?.hits,awayErrors:g.linescore.teams?.away?.errors,homeErrors:g.linescore.teams?.home?.errors}:null;
-      games.push({gamePk:g.gamePk,h:ht,a:at,d:dateObj.date,t:gameTimeUTC,broadcasts,tv:broadcasts[0]||'TBD',hs,as:as_,isHome,opponent,phillies:philliesScore,opp:oppScore,played,inProgress,postponed,suspended,cancelled,postponeReason,status:detail,inningStr,venue:g.venue?.name||(isHome?'Citizens Bank Park':opponent),philliesProbable,oppProbable,philliesProbableId,oppProbableId,ls});
+      games.push({gamePk:g.gamePk,h:ht,a:at,d:dateObj.date,t:gameTimeUTC,utc:gameISO,broadcasts,tv:broadcasts[0]||'TBD',hs,as:as_,isHome,opponent,phillies:philliesScore,opp:oppScore,played,inProgress,postponed,suspended,cancelled,postponeReason,status:detail,inningStr,venue:g.venue?.name||(isHome?'Citizens Bank Park':opponent),philliesProbable,oppProbable,philliesProbableId,oppProbableId,ls});
     }
   }
-  return games.sort((a,b)=>(a.d+a.t)>(b.d+b.t)?1:-1);
+  return games.sort((a,b)=>a.utc>b.utc?1:-1);
 }
 function parseStandings(data) {
   const out=[];
@@ -1355,13 +1357,14 @@ function parseStandings(data) {
 }
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
-function pt(d,t) {
+function pt(d,utcISO) {
+  // d  = local game date (YYYY-MM-DD) — always use this for the DATE label
+  // utcISO = full UTC ISO string (e.g. '2026-05-30T02:05:00Z') — use for TIME label
+  // Never reconstruct from d+t because the UTC date may differ from local game date
   try {
-    const dt=new Date(`${d}T${t||'18:00:00'}Z`), tz={timeZone:'America/New_York'};
-    // Use d (MLB schedule date) directly for date display to avoid UTC midnight crossover
-    // shifting west-coast games (2am UTC) back to the wrong calendar day
+    const dt=new Date(utcISO||(d+'T18:00:00Z')), tz={timeZone:'America/New_York'};
     const [y,mo,dy]=d.split('-').map(Number);
-    const localDate=new Date(y,mo-1,dy,12,0,0); // noon local — just for date formatting
+    const localDate=new Date(y,mo-1,dy,12,0,0); // noon local — for date display only
     return {
       date: localDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),
       time: dt.toLocaleTimeString('en-US',{...tz,hour:'numeric',minute:'2-digit',timeZoneName:'short'}),
@@ -1375,7 +1378,7 @@ function todayStr(){return new Date().toLocaleDateString('en-CA',{timeZone:'Amer
 function nextGame() {
   const live=ALL.find(g=>g.inProgress); if(live) return live;
   const now=Date.now();
-  return ALL.find(g=>!g.played&&!g.postponed&&new Date(`${g.d}T${g.t}Z`).getTime()>now-10800000)||ALL.filter(g=>g.played).slice(-1)[0]||ALL[0];
+  return ALL.find(g=>!g.played&&!g.postponed&&new Date(g.utc).getTime()>now-10800000)||ALL.filter(g=>g.played).slice(-1)[0]||ALL[0];
 }
 function seriesGroups() {
   const gs=[]; let cur=null;
@@ -1537,7 +1540,7 @@ async function loadWeather(g){
     const data=await res.json();
     if(!data.hourly){renderTab('next');return;}
     const tz=data.timezone||'America/New_York';
-    const gameMsUTC=new Date(`${g.d}T${g.t}Z`).getTime();
+    const gameMsUTC=new Date(g.utc).getTime();
     const localHourStr=new Date(gameMsUTC).toLocaleString('en-US',{hour:'2-digit',hour12:false,timeZone:tz});
     const gameHour=parseInt(localHourStr);
     const hourIdx=data.hourly.time.findIndex(t=>parseInt(t.split('T')[1])===gameHour);
@@ -1780,7 +1783,7 @@ function renderNext() {
   const td=todayStr(), isDefaultView=viewingGameIdx===null;
   const idx=getViewingIdx(), g=ALL[idx]||nextGame();
   if(!g) return '<div class="loading">No schedule data.</div>';
-  const {date,time,ms}=pt(g.d,g.t);
+  const {date,time,ms}=pt(g.d,g.utc);
   const ti=teamInfo(g.opponent);
   const navLabel=`${date} · ${g.isHome?'vs':'@'} ${g.opponent}`;
 
@@ -1944,12 +1947,12 @@ function startCd(ms) {
 function renderSchedule() {
   const now=Date.now(),dayMs=86400000,cutoff=now+8*dayMs;
   const todayStr=new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'});
-  let weekGames=ALL.filter(g=>{const gms=new Date(`${g.d}T${g.t}Z`).getTime();return(gms<cutoff&&gms>now-dayMs)||g.inProgress||g.d===todayStr;});
+  let weekGames=ALL.filter(g=>{const gms=new Date(g.utc).getTime();return(gms<cutoff&&gms>now-dayMs)||g.inProgress||g.d===todayStr;});
   if (!weekGames.length){const ng=ALL.find(g=>!g.played&&!g.inProgress);weekGames=ng?ALL.slice(ALL.indexOf(ng),ALL.indexOf(ng)+6):[];if(!weekGames.length)return'<div class="no-games">No upcoming games found.</div>';}
   const hdr=weekGames.some(g=>g.d===todayStr)?'This Week':'Next Games';
 
   const cards=weekGames.map(g=>{
-    const {date,time}=pt(g.d,g.t),ti=teamInfo(g.opponent),today=g.d===todayStr;
+    const {date,time}=pt(g.d,g.utc),ti=teamInfo(g.opponent),today=g.d===todayStr;
     let pillHtml='',cardCls='',resultHtml='';
     if(g.inProgress){pillHtml=`<span class="sc-pill live-p"><span class="live-dot"></span>${g.inningStr||'Live'}</span>`;cardCls='live';if(g.phillies!=null)resultHtml=`<div class="sc-final lv">${g.phillies}–${g.opp}</div>`;}
     else if(g.played){const w=g.phillies>g.opp;pillHtml=`<span class="sc-pill ${w?'win-p':'loss-p'}">${w?'W':'L'} ${g.phillies}–${g.opp}</span>`;resultHtml=`<div class="sc-final ${w?'w':'l'}">${w?'W':'L'} ${g.phillies}–${g.opp}</div>`;}
@@ -2029,14 +2032,14 @@ function renderSeries() {
   const seriesRows=grps.map((grp,idx)=>{
     const res=seriesResult(grp.games),rc=rowCls(res);
     const first=grp.games[0],lastG=grp.games[grp.games.length-1];
-    const dr=`${pt(first.d,first.t).short}${grp.games.length>1?' – '+pt(lastG.d,lastG.t).short:''}`;
+    const dr=`${pt(first.d,first.utc).short}${grp.games.length>1?' – '+pt(lastG.d,lastG.utc).short:''}`;
     const ti=teamInfo(grp.opp);
     const nG=grp.games.length;
     const cols=grp.games.map((g,gi)=>{
       if(g.inProgress&&g.phillies!=null){const pa=g.phillies>=g.opp;return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-line ${pa?'row-win':''}"><span class="sr-g-abbr p">PHI</span><span class="sr-g-score live-s">${g.phillies}</span></div><div class="sr-g-line ${!pa?'row-win':''}"><span class="sr-g-abbr o">${ti.a}</span><span class="sr-g-score live-s">${g.opp}</span></div><div class="sr-g-result lv">LIVE</div></div>`;}
       if(g.played&&g.phillies!=null){const phiW=g.phillies>g.opp;const tv=g.broadcasts.length?getBc(g.broadcasts[0]):null;return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-line ${phiW?'row-win':''}"><span class="sr-g-abbr p ${phiW?'phi-win':'phi-loss'}">PHI</span><span class="sr-g-score ${phiW?'win':'lose'}">${g.phillies}</span></div><div class="sr-g-line ${!phiW?'row-win':''}"><span class="sr-g-abbr o">${ti.a}</span><span class="sr-g-score opp-score">${g.opp}</span></div><div class="sr-g-result ${phiW?'w':'l'}">${phiW?'WIN':'LOSS'}</div>${tv?`<div class="sr-g-tv">${tv.display.replace('NBC Sports Philly','NBCSP')}</div>`:''}</div>`;}
       if(g.postponed){const ppdLbl=g.cancelled?'CXL':g.suspended?'SUSP':'PPD';const ppdSub=g.postponeReason?`<div class="sr-g-ppd-reason">${g.postponeReason}</div>`:'';return`<div class="sr-game"${g.postponeReason?` title="${g.postponeReason}"`:''}><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-score u">${ppdLbl}</div>${ppdSub}</div>`;}
-      const {timeShort,short}=pt(g.d,g.t);const tv=g.broadcasts.length?getBc(g.broadcasts[0]):null;
+      const {timeShort,short}=pt(g.d,g.utc);const tv=g.broadcasts.length?getBc(g.broadcasts[0]):null;
       return`<div class="sr-game"><div class="sr-g-lbl">G${gi+1}</div><div class="sr-g-line"><span class="sr-g-abbr o" style="font-size:.44rem">${short}</span></div><div class="sr-g-score u">${timeShort}</div>${tv?`<div class="sr-g-tv">${tv.display.replace('NBC Sports Philly','NBCSP')}</div>`:''}</div>`;
     }).join('');
     return`<div class="sr-row ${rc}" id="sr-${idx}">
@@ -2607,7 +2610,7 @@ function sw(tab) {
   renderTab(tab);
 }
 function renderTab(tab) {
-  if(tab==='next'){document.getElementById('next-c').innerHTML=renderNext();const g=nextGame();if(g&&!g.played&&!g.inProgress){const ms=new Date(`${g.d}T${g.t}Z`).getTime();if(ms>Date.now())startCd(ms);}}
+  if(tab==='next'){document.getElementById('next-c').innerHTML=renderNext();const g=nextGame();if(g&&!g.played&&!g.inProgress){const ms=new Date(g.utc).getTime();if(ms>Date.now())startCd(ms);}}
   if(tab==='schedule')  document.getElementById('schedule-c').innerHTML=renderSchedule();
   if(tab==='series')    document.getElementById('series-c').innerHTML=renderSeries();
   if(tab==='standings') document.getElementById('standings-c').innerHTML=renderStandings();
