@@ -1358,7 +1358,17 @@ function parseStandings(data) {
 function pt(d,t) {
   try {
     const dt=new Date(`${d}T${t||'18:00:00'}Z`), tz={timeZone:'America/New_York'};
-    return {date:dt.toLocaleDateString('en-US',{...tz,weekday:'short',month:'short',day:'numeric'}),time:dt.toLocaleTimeString('en-US',{...tz,hour:'numeric',minute:'2-digit',timeZoneName:'short'}),timeShort:dt.toLocaleTimeString('en-US',{...tz,hour:'numeric',minute:'2-digit'}),short:dt.toLocaleDateString('en-US',{...tz,month:'short',day:'numeric'}),ms:dt.getTime()};
+    // Use d (MLB schedule date) directly for date display to avoid UTC midnight crossover
+    // shifting west-coast games (2am UTC) back to the wrong calendar day
+    const [y,mo,dy]=d.split('-').map(Number);
+    const localDate=new Date(y,mo-1,dy,12,0,0); // noon local — just for date formatting
+    return {
+      date: localDate.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'}),
+      time: dt.toLocaleTimeString('en-US',{...tz,hour:'numeric',minute:'2-digit',timeZoneName:'short'}),
+      timeShort: dt.toLocaleTimeString('en-US',{...tz,hour:'numeric',minute:'2-digit'}),
+      short: localDate.toLocaleDateString('en-US',{month:'short',day:'numeric'}),
+      ms: dt.getTime()
+    };
   } catch { return {date:d,time:'TBD',timeShort:'TBD',short:d,ms:0}; }
 }
 function todayStr(){return new Date().toLocaleDateString('en-CA',{timeZone:'America/New_York'});}
