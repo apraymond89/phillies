@@ -215,6 +215,20 @@
     text-align: center;
     margin-bottom: 14px;
   }
+  .ng-playoff-badge {
+    display: block;
+    text-align: center;
+    font-size: 0.56rem;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #111;
+    background: linear-gradient(90deg, var(--gold) 0%, #fbbf24 100%);
+    border-radius: 20px;
+    padding: 4px 12px;
+    margin: 0 auto 10px;
+    width: fit-content;
+  }
   .ng-venue {
     text-align: center;
     font-size: 0.6rem;
@@ -564,6 +578,44 @@
   .sg-tile.live-winning  { color: var(--win); border: 1px solid rgba(34,197,94,.25); animation: blink-tile-green 1.4s ease-in-out infinite; }
   .sg-tile.live-losing   { color: var(--loss); border: 1px solid rgba(239,68,68,.25); animation: blink-tile-red 1.4s ease-in-out infinite; }
   .sg-tile.upcoming { background: var(--s2); color: var(--t4); border: 1px solid var(--s3); }
+
+  /* Playoff bracket */
+  .bkt-wrap { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+  .bkt-ws-section { text-align: center; }
+  .bkt-ws-section .bkt-round-lbl { margin-bottom: 8px; }
+  .bkt-league-section {
+    background: var(--s1);
+    border: 1px solid var(--s3);
+    border-radius: var(--r-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+  }
+  .bkt-league-hdr { padding: 10px 14px; font-size: 0.72rem; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+  .bkt-round { padding: 12px 14px; border-top: 1px solid var(--s3); }
+  .bkt-league-section .bkt-round:first-of-type { border-top: none; }
+  .bkt-round-lbl { font-size: 0.5rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--t3); margin-bottom: 8px; font-weight: 700; }
+  .bkt-round-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .bkt-round-single .bkt-round-cards { grid-template-columns: 1fr; }
+  .bkt-card {
+    background: var(--s2);
+    border: 1px solid var(--s3);
+    border-radius: var(--r-md);
+    padding: 9px 11px;
+    position: relative;
+  }
+  .bkt-card.bkt-phils { border-color: rgba(232,24,40,.3); }
+  .bkt-team { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 0.68rem; font-weight: 700; color: var(--t2); }
+  .bkt-emoji { font-size: 0.9rem; flex-shrink: 0; }
+  .bkt-team-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bkt-wins { font-weight: 900; font-family: 'Arial Black', Arial, sans-serif; color: var(--t1); flex-shrink: 0; }
+  .bkt-team.bkt-winner .bkt-team-name, .bkt-team.bkt-winner .bkt-wins { color: var(--win); }
+  .bkt-team.bkt-loser { opacity: 0.5; }
+  .bkt-sub { font-size: 0.5rem; color: var(--t4); margin-top: 5px; letter-spacing: .3px; }
+  .bkt-card.bkt-tbd { opacity: 0.4; }
+  .bkt-card.bkt-tbd .bkt-team-name { color: var(--t4); font-style: italic; }
+  .bkt-card.live-winning { animation: blink-tile-green 1.4s ease-in-out infinite; border-color: rgba(34,197,94,.3); }
+  .bkt-card.live-losing  { animation: blink-tile-red 1.4s ease-in-out infinite; border-color: rgba(239,68,68,.3); }
+  .bkt-card.live         { animation: blink-tile-yellow 1.4s ease-in-out infinite; border-color: rgba(245,158,11,.3); }
 
   /* Pace */
   .pace-row {
@@ -1262,6 +1314,22 @@ function teamInfo(name) {
   return { e:'⚾', a:(name||'???').split(' ').pop().substring(0,3).toUpperCase() };
 }
 
+// ─── PLAYOFF ROUND HELPERS ─────────────────────────────────────────────────
+function shortRound(desc) {
+  if (!desc) return 'Playoffs';
+  const isAL = desc.includes('American'), isNL = desc.includes('National');
+  if (desc.includes('Wild Card')) return isAL?'AL Wild Card':isNL?'NL Wild Card':'Wild Card';
+  if (desc.includes('Division Series')) return isAL?'ALDS':isNL?'NLDS':'Division Series';
+  if (desc.includes('Championship Series')) return isAL?'ALCS':isNL?'NLCS':'Championship Series';
+  if (desc.includes('World Series')) return 'World Series';
+  return desc;
+}
+function roundBadgeText(g) {
+  if (!g.postseason) return '';
+  const r = shortRound(g.seriesDescription);
+  return g.seriesGameNumber ? `${r} · Gm ${g.seriesGameNumber}` : r;
+}
+
 // ─── BROADCAST DB ──────────────────────────────────────────────────────────
 const BC = {
   'NBCSP':                   {icon:'🦚',display:'NBC Sports Philadelphia',stream:'Watch on NBC Sports Philadelphia',url:'https://www.nbcsportsphiladelphia.com', type:'sub'},
@@ -1292,11 +1360,17 @@ const RADIO = [
 
 // ─── API ───────────────────────────────────────────────────────────────────
 async function fetchSchedule() {
-  const r = await fetch(`${MLB_API}/schedule?sportId=1&teamId=${PHILLIES_ID}&season=${SEASON}&gameType=R&hydrate=broadcasts(all),linescore,probablePitcher&startDate=${SEASON}-01-01&endDate=${SEASON}-12-31`);
+  // gameType R,F,D,L,W = regular season + Wild Card + Division Series + Championship Series + World Series
+  const r = await fetch(`${MLB_API}/schedule?sportId=1&teamId=${PHILLIES_ID}&season=${SEASON}&gameType=R,F,D,L,W&hydrate=broadcasts(all),linescore,probablePitcher&startDate=${SEASON}-01-01&endDate=${SEASON}-12-31`);
   if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json();
 }
 async function fetchStandings() {
   const r = await fetch(`${MLB_API}/standings?leagueId=103,104&season=${SEASON}&standingsType=regularSeason`);
+  if (!r.ok) return null; return r.json();
+}
+async function fetchBracket() {
+  // Full-league postseason schedule — every team, not just the Phillies
+  const r = await fetch(`${MLB_API}/schedule?sportId=1&season=${SEASON}&gameType=F,D,L,W&hydrate=linescore`);
   if (!r.ok) return null; return r.json();
 }
 
@@ -1331,7 +1405,12 @@ function parseGames(data) {
       const philliesProbableId=isHome?(g.teams.home.probablePitcher?.id||null):(g.teams.away.probablePitcher?.id||null);
       const oppProbableId=isHome?(g.teams.away.probablePitcher?.id||null):(g.teams.home.probablePitcher?.id||null);
       const ls=g.linescore?{innings:g.linescore.innings||[],awayHits:g.linescore.teams?.away?.hits,homeHits:g.linescore.teams?.home?.hits,awayErrors:g.linescore.teams?.away?.errors,homeErrors:g.linescore.teams?.home?.errors}:null;
-      games.push({gamePk:g.gamePk,h:ht,a:at,d:dateObj.date,t:gameTimeUTC,utc:gameISO,broadcasts,tv:broadcasts[0]||'TBD',hs,as:as_,isHome,opponent,phillies:philliesScore,opp:oppScore,played,inProgress,postponed,suspended,cancelled,postponeReason,status:detail,inningStr,venue:g.venue?.name||(isHome?'Citizens Bank Park':opponent),philliesProbable,oppProbable,philliesProbableId,oppProbableId,ls});
+      const gameType=g.gameType||'R';
+      const postseason=gameType!=='R';
+      const seriesDescription=g.seriesDescription||null;
+      const seriesGameNumber=g.seriesGameNumber||null;
+      const gamesInSeries=g.gamesInSeries||null;
+      games.push({gamePk:g.gamePk,h:ht,a:at,d:dateObj.date,t:gameTimeUTC,utc:gameISO,broadcasts,tv:broadcasts[0]||'TBD',hs,as:as_,isHome,opponent,phillies:philliesScore,opp:oppScore,played,inProgress,postponed,suspended,cancelled,postponeReason,status:detail,inningStr,venue:g.venue?.name||(isHome?'Citizens Bank Park':opponent),philliesProbable,oppProbable,philliesProbableId,oppProbableId,ls,gameType,postseason,seriesDescription,seriesGameNumber,gamesInSeries});
     }
   }
   return games.sort((a,b)=>a.utc>b.utc?1:-1);
@@ -1354,6 +1433,55 @@ function parseStandings(data) {
     });
   }
   return out;
+}
+
+// ─── POSTSEASON BRACKET ─────────────────────────────────────────────────────
+function classifySeries(desc) {
+  desc=desc||'';
+  const isAL=desc.includes('American'), isNL=desc.includes('National');
+  const league = isAL?'AL':isNL?'NL':'WS';
+  let round='OTHER';
+  if(desc.includes('Wild Card')) round='WC';
+  else if(desc.includes('Division Series')) round='LDS';
+  else if(desc.includes('Championship Series')) round='LCS';
+  else if(desc.includes('World Series')) round='WS';
+  return {league,round};
+}
+function parseBracketSeries(data) {
+  const byKey={};
+  for (const dateObj of (data.dates||[])) {
+    for (const g of (dateObj.games||[])) {
+      const homeTeam=g.teams.home.team, awayTeam=g.teams.away.team;
+      const desc=g.seriesDescription||'';
+      const pairKey=[homeTeam.id,awayTeam.id].sort((a,b)=>a-b).join('-');
+      const key=`${desc}|${pairKey}`;
+      const state=g.status?.abstractGameState||'', detail=g.status?.detailedState||'';
+      const played=state==='Final'||detail.includes('Final')||detail==='Game Over';
+      const inProgress=state==='Live'||detail==='In Progress';
+      const hs=(played||inProgress)?(g.teams.home.score??null):null;
+      const as_=(played||inProgress)?(g.teams.away.score??null):null;
+      if(!byKey[key]) byKey[key]={desc,homeTeam,awayTeam,games:[]};
+      byKey[key].games.push({homeId:homeTeam.id,awayId:awayTeam.id,homeScore:hs,awayScore:as_,played,inProgress,gameNumber:g.seriesGameNumber||0});
+    }
+  }
+  return Object.values(byKey).map(s=>{
+    s.games.sort((a,b)=>(a.gameNumber||0)-(b.gameNumber||0));
+    // Higher seed hosts Game 1 — use that team as the "top" side consistently
+    const g1=s.games[0];
+    const teamAId=g1?g1.homeId:s.homeTeam.id, teamBId=g1?g1.awayId:s.awayTeam.id;
+    const teamA=teamAId===s.homeTeam.id?s.homeTeam:s.awayTeam;
+    const teamB=teamBId===s.homeTeam.id?s.homeTeam:s.awayTeam;
+    let winsA=0,winsB=0;
+    for(const g of s.games){
+      if(!g.played||g.homeScore==null||g.awayScore==null) continue;
+      const aScore=g.homeId===teamAId?g.homeScore:g.awayScore;
+      const bScore=g.homeId===teamBId?g.homeScore:g.awayScore;
+      if(aScore>bScore) winsA++; else if(bScore>aScore) winsB++;
+    }
+    const anyLive=s.games.some(g=>g.inProgress);
+    const {league,round}=classifySeries(s.desc);
+    return {desc:s.desc,league,round,teamA,teamB,winsA,winsB,anyLive};
+  });
 }
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
@@ -1381,8 +1509,13 @@ function nextGame() {
   return ALL.find(g=>!g.played&&!g.postponed&&new Date(g.utc).getTime()>now-10800000)||ALL.filter(g=>g.played).slice(-1)[0]||ALL[0];
 }
 function seriesGroups() {
+  // Regular season only — postseason series are tracked in the Standings tab bracket instead
   const gs=[]; let cur=null;
-  for (const g of ALL){if(!cur||cur.opp!==g.opponent){cur={opp:g.opponent,games:[]};gs.push(cur);}cur.games.push(g);}
+  for (const g of ALL){
+    if(g.postseason) continue;
+    if(!cur||cur.opp!==g.opponent){cur={opp:g.opponent,games:[]};gs.push(cur);}
+    cur.games.push(g);
+  }
   return gs;
 }
 function seriesResult(games) {
@@ -1785,7 +1918,7 @@ function renderNext() {
   if(!g) return '<div class="loading">No schedule data.</div>';
   const {date,time,ms}=pt(g.d,g.utc);
   const ti=teamInfo(g.opponent);
-  const navLabel=`${date} · ${g.isHome?'vs':'@'} ${g.opponent}`;
+  const navLabel=g.postseason?`${roundBadgeText(g)} · ${g.isHome?'vs':'@'} ${g.opponent}`:`${date} · ${g.isHome?'vs':'@'} ${g.opponent}`;
 
   const navBar=`<div class="ng-nav">
     <button class="ng-nav-btn" onclick="navGame(-1)" ${idx===0?'disabled':''}>‹ Prev</button>
@@ -1855,6 +1988,7 @@ function renderNext() {
         ?`<div class="ppd-score">${g.isHome?`${g.opp} – ${g.phillies}`:`${g.phillies} – ${g.opp}`} <span class="ppd-innings">(${g.inningStr||'suspended'})</span></div>`
         :'';
       const heroBlock=`<div class="ng-hero">
+        ${g.postseason?`<div class="ng-playoff-badge">🏆 ${roundBadgeText(g)}</div>`:''}
         <div class="ng-label">${icon} ${statusLabel}${reasonStr}</div>
         <div class="ng-matchup">
           ${g.isHome
@@ -1873,6 +2007,7 @@ function renderNext() {
 
     const cdBlock=isDefaultView&&ms>Date.now()+60000?`<div class="countdown" style="margin-top:14px"><div class="cd-lbl">⏱ Time Until First Pitch</div><div class="cd-time" id="cdtime">—</div></div>`:'';
     const heroBlock=`<div class="ng-hero">
+      ${g.postseason?`<div class="ng-playoff-badge">🏆 ${roundBadgeText(g)}</div>`:''}
       <div class="ng-label">Next Game</div>
       <div class="ng-matchup">
         ${g.isHome
@@ -1900,6 +2035,7 @@ function renderNext() {
   <div class="score-status-row">${g.inProgress?`<span class="live-dot"></span>${g.inningStr||'In Progress'}`:`Final · ${phW?'✅ Win':'❌ Loss'}`}</div>`;
 
   const heroBlock=`<div class="ng-hero">
+    ${g.postseason?`<div class="ng-playoff-badge">🏆 ${roundBadgeText(g)}</div>`:''}
     <div class="ng-label">${g.inProgress?'<span class="live-dot"></span>Live Now':'Final'}</div>
     <div class="ng-matchup">
       ${g.isHome
@@ -1994,7 +2130,7 @@ function renderSchedule() {
 
 // ─── SERIES TRACKER ────────────────────────────────────────────────────────
 function renderSeries() {
-  const grps=seriesGroups(),played=ALL.filter(g=>g.played);
+  const grps=seriesGroups(),played=ALL.filter(g=>g.played&&!g.postseason);
   const wins=played.filter(g=>g.phillies>g.opp).length,losses=played.filter(g=>g.phillies<g.opp).length;
   const gPlayed=wins+losses;
   let sw=0,sl=0,ss=0;
@@ -2206,8 +2342,101 @@ function stdHdr(bg,accent,label,colHdr='<span class="std-header-col">W-L</span><
   return`<div class="std-header" style="background:${bg};color:${accent}">${label}<div class="std-header-cols" style="opacity:.75">${colHdr}</div></div>`;
 }
 
+// ─── PLAYOFF BRACKET (manual toggle on Standings tab) ──────────────────────
+let standingsView=(function(){try{return localStorage.getItem('standingsView')||'standings';}catch(e){return'standings';}})();
+let BRACKET_GAMES=null, BRACKET_LOADED=false, BRACKET_LOADING=false, BRACKET_ERROR=false;
+
+function setStandingsView(v){
+  standingsView=v;
+  try{localStorage.setItem('standingsView',v);}catch(e){}
+  if(v==='bracket'&&!BRACKET_LOADED&&!BRACKET_LOADING) loadBracket();
+  const el=document.getElementById('standings-c'); if(el) el.innerHTML=renderStandings();
+}
+async function loadBracket(){
+  if(BRACKET_LOADING||BRACKET_LOADED) return;
+  BRACKET_LOADING=true; BRACKET_ERROR=false;
+  try{ const data=await fetchBracket(); BRACKET_GAMES=data?parseBracketSeries(data):[]; BRACKET_LOADED=true; }
+  catch(e){ BRACKET_ERROR=true; }
+  BRACKET_LOADING=false;
+  if(currentTab==='standings'){ const el=document.getElementById('standings-c'); if(el) el.innerHTML=renderStandings(); }
+}
+
+const ROUND_WINS_NEEDED={WC:2,LDS:3,LCS:4,WS:4};
+
+function bktCard(s){
+  if(!s){
+    return`<div class="bkt-card bkt-tbd">
+      <div class="bkt-team"><span class="bkt-emoji">❓</span><span class="bkt-team-name">TBD</span></div>
+      <div class="bkt-team"><span class="bkt-emoji">❓</span><span class="bkt-team-name">TBD</span></div>
+      <div class="bkt-sub">Not yet determined</div>
+    </div>`;
+  }
+  const tiA=teamInfo(s.teamA.name), tiB=teamInfo(s.teamB.name);
+  const isPhilA=s.teamA.id===PHILLIES_ID, isPhilB=s.teamB.id===PHILLIES_ID;
+  const needed=ROUND_WINS_NEEDED[s.round]||4;
+  const decided=s.winsA>=needed||s.winsB>=needed;
+  let stateCls='';
+  if(!decided&&(isPhilA||isPhilB)){
+    const philWins=isPhilA?s.winsA:s.winsB, oppWins=isPhilA?s.winsB:s.winsA;
+    if(philWins>oppWins) stateCls='live-winning';
+    else if(philWins<oppWins) stateCls='live-losing';
+    else stateCls=s.anyLive?'live':'';
+  }
+  const aWon=decided&&s.winsA>s.winsB, bWon=decided&&s.winsB>s.winsA;
+  const subText=decided
+    ?`${aWon?s.teamA.name:s.teamB.name} wins series`
+    :s.anyLive?'● LIVE'
+    :(s.winsA||s.winsB)?`Leads ${Math.max(s.winsA,s.winsB)}–${Math.min(s.winsA,s.winsB)}`
+    :'Not started';
+  return`<div class="bkt-card ${stateCls} ${(isPhilA||isPhilB)?'bkt-phils':''}">
+    <div class="bkt-team ${aWon?'bkt-winner':decided?'bkt-loser':''}"><span class="bkt-emoji">${tiA.e}</span><span class="bkt-team-name">${isPhilA?'Phillies':s.teamA.name}</span><span class="bkt-wins">${s.winsA}</span></div>
+    <div class="bkt-team ${bWon?'bkt-winner':decided?'bkt-loser':''}"><span class="bkt-emoji">${tiB.e}</span><span class="bkt-team-name">${isPhilB?'Phillies':s.teamB.name}</span><span class="bkt-wins">${s.winsB}</span></div>
+    <div class="bkt-sub">${subText}</div>
+  </div>`;
+}
+
+function retryBracket(){
+  BRACKET_ERROR=false;
+  const el=document.getElementById('standings-c');
+  if(el) el.innerHTML='<div class="loading"><div class="spin"></div>Loading bracket…</div>';
+  loadBracket();
+}
+function renderBracket(){
+  if(BRACKET_ERROR){
+    return`<div class="err-box"><p>⚾ Couldn't load the playoff bracket.</p><button class="retry-btn" onclick="retryBracket()">Retry</button></div>`;
+  }
+  if(!BRACKET_LOADED){
+    loadBracket();
+    return'<div class="loading"><div class="spin"></div>Loading bracket…</div>';
+  }
+  const series=BRACKET_GAMES||[];
+  const bucket=(lg,rd)=>series.filter(s=>s.league===lg&&s.round===rd);
+  const wsSeries=series.find(s=>s.round==='WS')||null;
+
+  const leagueSection=(lg,label,lgId)=>{
+    const wc=bucket(lg,'WC'), lds=bucket(lg,'LDS'), lcs=bucket(lg,'LCS');
+    return`<div class="bkt-league-section">
+      <div class="bkt-league-hdr" style="background:${LG_BG[lgId]};color:${LG_ACCENT[lgId]}">${label}</div>
+      <div class="bkt-round"><div class="bkt-round-lbl">Wild Card</div><div class="bkt-round-cards">${bktCard(wc[0]||null)}${bktCard(wc[1]||null)}</div></div>
+      <div class="bkt-round"><div class="bkt-round-lbl">Division Series</div><div class="bkt-round-cards">${bktCard(lds[0]||null)}${bktCard(lds[1]||null)}</div></div>
+      <div class="bkt-round bkt-round-single"><div class="bkt-round-lbl">Championship Series</div><div class="bkt-round-cards">${bktCard(lcs[0]||null)}</div></div>
+    </div>`;
+  };
+
+  return`<div class="bkt-wrap">
+    <div class="bkt-ws-section"><div class="bkt-round-lbl" style="text-align:center">🏆 World Series</div>${bktCard(wsSeries)}</div>
+    ${leagueSection('NL','National League',104)}
+    ${leagueSection('AL','American League',103)}
+  </div>`;
+}
+
 function renderStandings() {
-  if(!STANDINGS.length) return '<div class="loading">No standings data yet.</div>';
+  const modeToggle=`<div class="std-sub-tabs" style="margin-bottom:10px">
+    <button class="std-sub-btn ${standingsView==='standings'?'active':''}" onclick="setStandingsView('standings')">📊 Standings</button>
+    <button class="std-sub-btn ${standingsView==='bracket'?'active':''}" onclick="setStandingsView('bracket')">🏆 Playoff Bracket</button>
+  </div>`;
+  if(standingsView==='bracket') return modeToggle+renderBracket();
+  if(!STANDINGS.length) return modeToggle+'<div class="loading">No standings data yet.</div>';
   const filtersHtml=`<div class="std-sub-tabs">
     <button class="std-sub-btn ${stdFilter==='division'?'active':''}" onclick="setStdFilter('division')">Division</button>
     <button class="std-sub-btn ${stdFilter==='league'?'active':''}" onclick="setStdFilter('league')">League</button>
@@ -2259,7 +2488,7 @@ function renderStandings() {
       </div></div>`;
     }
   }
-  return filtersHtml+body;
+  return modeToggle+filtersHtml+body;
 }
 function setStdFilter(f){stdFilter=f;document.getElementById('standings-c').innerHTML=renderStandings();}
 
