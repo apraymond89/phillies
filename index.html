@@ -1316,12 +1316,15 @@ function teamInfo(name) {
 
 // ─── PLAYOFF ROUND HELPERS ─────────────────────────────────────────────────
 function shortRound(desc) {
+  // Real MLB API format: "NL Wild Card 'A' Game 1", "NLDS 'A' Game 3", "NLCS Game 1", "World Series Game 1"
   if (!desc) return 'Playoffs';
-  const isAL = desc.includes('American'), isNL = desc.includes('National');
-  if (desc.includes('Wild Card')) return isAL?'AL Wild Card':isNL?'NL Wild Card':'Wild Card';
-  if (desc.includes('Division Series')) return isAL?'ALDS':isNL?'NLDS':'Division Series';
-  if (desc.includes('Championship Series')) return isAL?'ALCS':isNL?'NLCS':'Championship Series';
-  if (desc.includes('World Series')) return 'World Series';
+  if (desc.startsWith('World Series')) return 'World Series';
+  if (desc.startsWith('NL Wild Card')) return 'NL Wild Card';
+  if (desc.startsWith('AL Wild Card')) return 'AL Wild Card';
+  if (desc.startsWith('NLDS')) return 'NLDS';
+  if (desc.startsWith('ALDS')) return 'ALDS';
+  if (desc.startsWith('NLCS')) return 'NLCS';
+  if (desc.startsWith('ALCS')) return 'ALCS';
   return desc;
 }
 function roundBadgeText(g) {
@@ -1407,8 +1410,10 @@ function parseGames(data) {
       const ls=g.linescore?{innings:g.linescore.innings||[],awayHits:g.linescore.teams?.away?.hits,homeHits:g.linescore.teams?.home?.hits,awayErrors:g.linescore.teams?.away?.errors,homeErrors:g.linescore.teams?.home?.errors}:null;
       const gameType=g.gameType||'R';
       const postseason=gameType!=='R';
-      const seriesDescription=g.seriesDescription||null;
-      const seriesGameNumber=g.seriesGameNumber||null;
+      // MLB API has no `seriesDescription` field — the real field is `description`
+      // (e.g. "NLDS 'A' Game 3", "World Series Game 1"); game number is `gameNumber`, not `seriesGameNumber`
+      const seriesDescription=g.description||null;
+      const seriesGameNumber=g.gameNumber||null;
       const gamesInSeries=g.gamesInSeries||null;
       games.push({gamePk:g.gamePk,h:ht,a:at,d:dateObj.date,t:gameTimeUTC,utc:gameISO,broadcasts,tv:broadcasts[0]||'TBD',hs,as:as_,isHome,opponent,phillies:philliesScore,opp:oppScore,played,inProgress,postponed,suspended,cancelled,postponeReason,status:detail,inningStr,venue:g.venue?.name||(isHome?'Citizens Bank Park':opponent),philliesProbable,oppProbable,philliesProbableId,oppProbableId,ls,gameType,postseason,seriesDescription,seriesGameNumber,gamesInSeries});
     }
@@ -1437,31 +1442,32 @@ function parseStandings(data) {
 
 // ─── POSTSEASON BRACKET ─────────────────────────────────────────────────────
 function classifySeries(desc) {
+  // Real MLB API format: "NL Wild Card 'A' Game 1", "NLDS 'A' Game 3", "NLCS Game 1", "World Series Game 1"
   desc=desc||'';
-  const isAL=desc.includes('American'), isNL=desc.includes('National');
-  const league = isAL?'AL':isNL?'NL':'WS';
-  let round='OTHER';
-  if(desc.includes('Wild Card')) round='WC';
-  else if(desc.includes('Division Series')) round='LDS';
-  else if(desc.includes('Championship Series')) round='LCS';
-  else if(desc.includes('World Series')) round='WS';
-  return {league,round};
+  if(desc.startsWith('World Series')) return {league:'WS',round:'WS'};
+  if(desc.startsWith('NL Wild Card')) return {league:'NL',round:'WC'};
+  if(desc.startsWith('AL Wild Card')) return {league:'AL',round:'WC'};
+  if(desc.startsWith('NLDS')) return {league:'NL',round:'LDS'};
+  if(desc.startsWith('ALDS')) return {league:'AL',round:'LDS'};
+  if(desc.startsWith('NLCS')) return {league:'NL',round:'LCS'};
+  if(desc.startsWith('ALCS')) return {league:'AL',round:'LCS'};
+  return {league:'WS',round:'OTHER'};
 }
 function parseBracketSeries(data) {
   const byKey={};
   for (const dateObj of (data.dates||[])) {
     for (const g of (dateObj.games||[])) {
       const homeTeam=g.teams.home.team, awayTeam=g.teams.away.team;
-      const desc=g.seriesDescription||'';
+      // Team pair alone is a safe grouping key: two teams can only ever meet in one series per postseason
+      const desc=g.description||'';
       const pairKey=[homeTeam.id,awayTeam.id].sort((a,b)=>a-b).join('-');
-      const key=`${desc}|${pairKey}`;
       const state=g.status?.abstractGameState||'', detail=g.status?.detailedState||'';
       const played=state==='Final'||detail.includes('Final')||detail==='Game Over';
       const inProgress=state==='Live'||detail==='In Progress';
       const hs=(played||inProgress)?(g.teams.home.score??null):null;
       const as_=(played||inProgress)?(g.teams.away.score??null):null;
-      if(!byKey[key]) byKey[key]={desc,homeTeam,awayTeam,games:[]};
-      byKey[key].games.push({homeId:homeTeam.id,awayId:awayTeam.id,homeScore:hs,awayScore:as_,played,inProgress,gameNumber:g.seriesGameNumber||0});
+      if(!byKey[pairKey]) byKey[pairKey]={desc,homeTeam,awayTeam,games:[]};
+      byKey[pairKey].games.push({homeId:homeTeam.id,awayId:awayTeam.id,homeScore:hs,awayScore:as_,played,inProgress,gameNumber:g.gameNumber||0});
     }
   }
   return Object.values(byKey).map(s=>{
